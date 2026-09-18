@@ -15,3 +15,4 @@
       ! typesafe returned a response that is not valid JSON: lexical error: invalid string in json text.
                                             {not valid json
                            (right here) ------^
+
