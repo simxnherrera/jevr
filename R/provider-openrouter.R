@@ -112,7 +112,7 @@ jev_request_openrouter <- function(
         "https://github.com/simxnherrera/jevr",
         "jevr"
       ),
-      c("HTTP-Referer", "X-Title")
+      c("HTTP-Referer", "X-OpenRouter-Title")
     )
   )
   response <- jev_send_request(

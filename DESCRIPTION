@@ -1,8 +1,8 @@
 Package: jevr
-Title: A Native R Client for JEV System One Decisions
+Title: A Native R Client for 'JEV' System One Decisions
 Version: 0.0.0.9000
-Authors@R: person("Simon", "Herrera", email = "simxnherrera@gmail.com", role = c("aut", "cre"))
-Description: A small, provider-independent R client for TypeSafe System One decisions through JEV, with typed questions, structured answers, and direct support for TypeSafe and OpenRouter.
+Authors@R: person("Simon", "Herrera", email = "simxnherrera@gmail.com", role = c("aut", "cre", "cph"))
+Description: Define typed questions and submit structured decisions to 'JEV', the System One model from 'TypeSafe'. Provide a provider-independent interface for shared state, Choice, Score, and Noul questions, with probabilities, confidence, usage, and raw response metadata preserved. Support the direct 'TypeSafe' application programming interface (API) and the Decisions endpoint of 'OpenRouter' with bounded retries and informative errors.
 License: MIT + file LICENSE
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)

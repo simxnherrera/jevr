@@ -27,6 +27,12 @@ history, token streaming, or tool calling.
 
 ## Installation
 
+After a CRAN release, install the stable version with:
+
+```{r, eval=FALSE}
+install.packages("jevr")
+```
+
 Install the development version from GitHub:
 
 ```{r, eval=FALSE}

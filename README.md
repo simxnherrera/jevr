@@ -32,6 +32,12 @@ does not expose chat history, token streaming, or tool calling.
 
 ## Installation
 
+After a CRAN release, install the stable version with:
+
+``` r
+install.packages("jevr")
+```
+
 Install the development version from GitHub:
 
 ``` r

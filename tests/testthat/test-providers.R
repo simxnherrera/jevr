@@ -45,7 +45,7 @@ test_that("OpenRouter uses the Decisions endpoint and its model alias", {
     captured_request$headers[["HTTP-Referer"]],
     "https://github.com/simxnherrera/jevr"
   )
-  expect_equal(captured_request$headers[["X-Title"]], "jevr")
+  expect_equal(captured_request$headers[["X-OpenRouter-Title"]], "jevr")
   expect_equal(captured_request$body$data$model, "~typesafe/jev-latest")
   expect_equal(
     captured_request$body$data$questions$urgent$criteria$true,
