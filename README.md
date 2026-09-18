@@ -59,7 +59,9 @@ keys in package code, tests, or committed files.
 
 ``` r
 usethis::edit_r_environ()
+```
 
+``` text
 # For direct TypeSafe requests:
 TYPESAFE_API_KEY=your_typesafe_key
 
@@ -216,6 +218,6 @@ the relevant provider key.
 
 ## Status
 
-jevr is an early development version. The initial API and provider
-contracts are intentionally small; the package does not yet provide a
-chat interface, streaming, tool calling, or bulk classification helpers.
+The initial API and provider contracts are intentionally small; the
+package does not provide a chat interface, streaming, tool calling, or
+bulk classification helpers.
