@@ -1,0 +1,14 @@
+Package: jevr
+Title: A Native R Client for JEV System One Decisions
+Version: 0.0.0.9000
+Authors@R: person("Simon", "Herrera", email = "simon.herrera@example.com", role = c("aut", "cre"))
+Description: A small, provider-independent R client for TypeSafe System One decisions through JEV, with typed questions, structured answers, and direct support for TypeSafe and OpenRouter.
+License: MIT + file LICENSE
+Encoding: UTF-8
+Roxygen: list(markdown = TRUE)
+Suggests: 
+    testthat (>= 3.0.0)
+Config/testthat/edition: 3
+Imports: 
+    httr2
+Config/roxygen2/version: 8.1.0
