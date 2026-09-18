@@ -1,54 +1,207 @@
 ---
-output: github_document
+output:
+  github_document:
+    toc: true
+    toc_depth: 2
 ---
 
 <!-- README.md is generated from README.Rmd. Please edit that file -->
 
-```{r, include = FALSE}
-knitr::opts_chunk$set(
-  collapse = TRUE,
-  comment = "#>",
-  fig.path = "man/figures/README-",
-  out.width = "100%"
-)
-```
-
 # jevr
 
 <!-- badges: start -->
+[![R-CMD-check](https://github.com/simxnherrera/jevr/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/simxnherrera/jevr/actions/workflows/R-CMD-check.yaml)
 <!-- badges: end -->
 
-The goal of jevr is to ...
+jevr is a small native R client for [JEV / TypeSafe System One](https://docs.typesafe.ai/concepts/system-one).
+It turns a state and a set of typed questions into structured decisions:
+
+```text
+state + questions -> model -> typed answers
+```
+
+System One is a decision interface, not a conversational chat interface. The
+package therefore focuses on typed questions, batched requests, probabilities,
+confidence, and provider-independent response objects. It does not expose chat
+history, token streaming, or tool calling.
 
 ## Installation
 
-You can install the development version of jevr like so:
+Install the development version from GitHub:
 
-``` r
-# FILL THIS IN! HOW CAN PEOPLE INSTALL YOUR DEV PACKAGE?
+```{r, eval=FALSE}
+install.packages("pak")
+pak::pak("simxnherrera/jevr")
 ```
 
-## Example
+For local development:
 
-This is a basic example which shows you how to solve a common problem:
+```{r, eval=FALSE}
+pak::pak("devtools")
+devtools::load_all()
+```
 
-```{r example}
+## Credentials
+
+Use an environment variable for the provider you select. Do not put API keys
+in package code, tests, or committed files.
+
+```{r, eval=FALSE}
+usethis::edit_r_environ()
+
+# For direct TypeSafe requests:
+TYPESAFE_API_KEY=your_typesafe_key
+
+# For OpenRouter requests:
+OPENROUTER_API_KEY=your_openrouter_key
+```
+
+The key is read when jev_ask() is called. The package never prints it in
+errors or stores it in the repository.
+
+## First request
+
+The public API has four functions: jev_ask(), jev_choice(), jev_score(), and
+jev_noul().
+
+```{r, eval=FALSE}
 library(jevr)
-## basic example code
+
+questions <- list(
+  department = jev_choice(
+    instructions = "Which team should handle this?",
+    criteria = c(
+      billing = "Payments, invoicing, refunds",
+      technical = "Bugs, outages, integrations",
+      sales = "Pricing, upgrades, new accounts"
+    )
+  ),
+  urgent = jev_noul(
+    instructions = "Does this request convey urgency?"
+  )
+)
+
+result <- jev_ask(
+  state = "Help! My payouts have been failing for three days.",
+  questions = questions
+)
+
+result$model
+result$answers$department$choice
+result$answers$department$probabilities
+result$answers$urgent$noul
 ```
 
-What is special about using `README.Rmd` instead of just `README.md`? You can include R chunks like so:
+Question IDs come from the names of the questions list. They are preserved
+in the request and in result$answers, so multiple questions can be sent in a
+single request without losing the mapping between a question and its answer.
 
-```{r cars}
-summary(cars)
+## Typed questions
+
+### Choice
+
+jev_choice() selects one named option and preserves the full probability
+distribution and confidence:
+
+```{r, eval=FALSE}
+question <- jev_choice(
+  instructions = "Which priority applies?",
+  criteria = c(
+    low = "Can wait",
+    high = "Needs attention soon"
+  )
+)
 ```
 
-You'll still need to render `README.Rmd` regularly, to keep `README.md` up-to-date. `devtools::build_readme()` is handy for this.
+### Score
 
-You can also embed plots, for example:
+jev_score() returns an ordered score, its legend, probabilities, and
+confidence:
 
-```{r pressure, echo = FALSE}
-plot(pressure)
+```{r, eval=FALSE}
+question <- jev_score(
+  instructions = "How severe is the issue?",
+  criteria = c(
+    "Minor inconvenience",
+    "Material disruption",
+    "Service unavailable"
+  )
+)
 ```
 
-In that case, don't forget to commit and push the resulting figure files, so they display on GitHub and CRAN.
+### Noul
+
+jev_noul() returns the continuous value between 0 and 1. It does not silently
+convert that value to TRUE or FALSE:
+
+```{r, eval=FALSE}
+question <- jev_noul(
+  instructions = "Does the request require immediate action?",
+  criteria = list(
+    true = "The request describes an immediate operational risk",
+    false = "The request can wait without immediate harm"
+  )
+)
+```
+
+## Providers
+
+### TypeSafe
+
+TypeSafe is the default provider. jevr sends a batched request to the
+official System One endpoint and uses the stable jev-latest model alias by
+default.
+
+```{r, eval=FALSE}
+result <- jev_ask(
+  state = list(
+    customer = "Acme",
+    message = "My payouts have been failing for three days."
+  ),
+  questions = questions,
+  provider = "typesafe"
+)
+```
+
+state may be a character value, a named list representing a JSON object, or an
+unnamed list representing a JSON array. The package keeps those structures as
+structured JSON when the provider supports them.
+
+### OpenRouter
+
+OpenRouter is available through its Decisions endpoint. Select it without
+changing the question definitions:
+
+```{r, eval=FALSE}
+result <- jev_ask(
+  state = "Help! My payouts have been failing for three days.",
+  questions = questions,
+  provider = "openrouter"
+)
+```
+
+OpenRouter uses ~typesafe/jev-latest by default and authenticates with
+OPENROUTER_API_KEY. Its current Decisions schema accepts textual instructions
+and criteria; use the direct TypeSafe provider when you need structured
+instruction or criteria values.
+
+## Development
+
+The package follows the workflow from [R Packages (2e)](https://r-pkgs.org/):
+
+```{r, eval=FALSE}
+devtools::load_all()
+devtools::document()
+devtools::test()
+devtools::check()
+```
+
+Normal tests mock the HTTP layer and do not require credentials or make
+network requests. Optional live integration tests are skipped on CRAN and
+unless the relevant environment variable is present.
+
+## Status
+
+jevr is an early development version. The initial API and provider contracts
+are intentionally small; the package does not yet provide a chat interface,
+streaming, tool calling, or bulk classification helpers.
