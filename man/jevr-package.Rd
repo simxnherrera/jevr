@@ -8,12 +8,20 @@
 \description{
 A small, provider-independent R client for TypeSafe System One decisions through JEV, with typed questions, structured answers, and direct support for TypeSafe and OpenRouter.
 }
+\seealso{
+Useful links:
+\itemize{
+  \item \url{https://github.com/simxnherrera/jevr}
+  \item Report bugs at \url{https://github.com/simxnherrera/jevr/issues}
+}
+
+}
 \author{
-\strong{Maintainer}: Simon Herrera \email{simon.herrera@example.com}
+\strong{Maintainer}: Simon Herrera \email{simxnherrera@gmail.com}
 
 Authors:
 \itemize{
-  \item Simon Herrera \email{simon.herrera@example.com}
+  \item Simon Herrera \email{simxnherrera@gmail.com}
 }
 
 }
