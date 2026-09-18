@@ -1,6 +1,10 @@
 test_that("optional direct TypeSafe integration request", {
   skip_on_cran()
   skip_if(
+    !identical(Sys.getenv("JEVR_RUN_INTEGRATION_TESTS"), "true"),
+    "Set JEVR_RUN_INTEGRATION_TESTS=true to run paid integration tests"
+  )
+  skip_if(
     !nzchar(Sys.getenv("TYPESAFE_API_KEY")),
     "TYPESAFE_API_KEY is not available"
   )
@@ -21,6 +25,10 @@ test_that("optional direct TypeSafe integration request", {
 
 test_that("optional OpenRouter integration request", {
   skip_on_cran()
+  skip_if(
+    !identical(Sys.getenv("JEVR_RUN_INTEGRATION_TESTS"), "true"),
+    "Set JEVR_RUN_INTEGRATION_TESTS=true to run paid integration tests"
+  )
   skip_if(
     !nzchar(Sys.getenv("OPENROUTER_API_KEY")),
     "OPENROUTER_API_KEY is not available"

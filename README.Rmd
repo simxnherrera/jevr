@@ -197,8 +197,9 @@ devtools::check()
 ```
 
 Normal tests mock the HTTP layer and do not require credentials or make
-network requests. Optional live integration tests are skipped on CRAN and
-unless the relevant environment variable is present.
+network requests. Paid live integration tests are skipped on CRAN and unless
+you explicitly set JEVR_RUN_INTEGRATION_TESTS=true together with the relevant
+provider key.
 
 ## Status
 
