@@ -53,6 +53,48 @@ test_that("OpenRouter uses the Decisions endpoint and its model alias", {
   )
 })
 
+test_that("OpenRouter serializes choice criteria as a JSON object", {
+  withr::local_envvar(OPENROUTER_API_KEY = "fake-openrouter-key")
+  captured_request <- NULL
+  mock <- function(req) {
+    captured_request <<- req
+    httr2::response(
+      status_code = 200,
+      headers = list("Content-Type" = "application/json"),
+      body = charToRaw(
+        paste0(
+          '{"model":"typesafe/jev-1.13",',
+          '"answers":{"department":{"type":"choice",',
+          '"choice":"technical","probabilities":{"technical":1},',
+          '"confidence":1}},',
+          '"usage":{"input_tokens":1,"output_tokens":1}}'
+        )
+      )
+    )
+  }
+
+  httr2::with_mocked_responses(
+    mock,
+    jev_ask(
+      state = "A payout failed",
+      questions = list(
+        department = jev_choice(
+          "Which team should handle this?",
+          c(billing = "Payments", technical = "Bugs")
+        )
+      ),
+      provider = "openrouter",
+      max_retries = 0
+    )
+  )
+
+  expect_type(captured_request$body$data$questions$department$criteria, "list")
+  expect_equal(
+    captured_request$body$data$questions$department$criteria$technical,
+    "Bugs"
+  )
+})
+
 test_that("OpenRouter reports its current string-only question constraint", {
   withr::local_envvar(OPENROUTER_API_KEY = "fake-openrouter-key")
 

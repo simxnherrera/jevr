@@ -33,6 +33,8 @@ jev_openrouter_question <- function(question, id) {
       },
       character(1)
     )
+    criteria <- as.list(criteria)
+    names(criteria) <- names(question$criteria)
 
     return(list(
       type = "choice",

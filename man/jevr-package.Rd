@@ -4,9 +4,9 @@
 \name{jevr-package}
 \alias{jevr}
 \alias{jevr-package}
-\title{jevr: A Native R Client for JEV System One Decisions}
+\title{jevr: A Native R Client for 'JEV' System One Decisions}
 \description{
-A small, provider-independent R client for TypeSafe System One decisions through JEV, with typed questions, structured answers, and direct support for TypeSafe and OpenRouter.
+Define typed questions and submit structured decisions to 'JEV', the System One model from 'TypeSafe'. Provide a provider-independent interface for shared state, Choice, Score, and Noul questions, with probabilities, confidence, usage, and raw response metadata preserved. Support the direct 'TypeSafe' application programming interface (API) and the Decisions endpoint of 'OpenRouter' with bounded retries and informative errors.
 }
 \seealso{
 Useful links:
@@ -17,11 +17,11 @@ Useful links:
 
 }
 \author{
-\strong{Maintainer}: Simon Herrera \email{simxnherrera@gmail.com}
+\strong{Maintainer}: Simon Herrera \email{simxnherrera@gmail.com} [copyright holder]
 
 Authors:
 \itemize{
-  \item Simon Herrera \email{simxnherrera@gmail.com}
+  \item Simon Herrera \email{simxnherrera@gmail.com} [copyright holder]
 }
 
 }
