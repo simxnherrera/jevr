@@ -2,7 +2,7 @@
 
 0 errors | 0 warnings | 0 notes
 
-* This is the first submission of version 0.1.0; it has not been submitted to
+* This GitHub release contains version 0.1.1; it has not been submitted to
   CRAN.
 * Local `devtools::check(error_on = "warning")` passed with R 4.6.1 on macOS.
 * GitHub Actions checks passed on Windows, macOS, Ubuntu release, Ubuntu

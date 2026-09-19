@@ -1,4 +1,4 @@
-# jevr 0.1.0
+# jevr 0.1.1
 
 * Added `jev_ask()` for batched, provider-independent System One decisions.
 * Added `jev_choice()`, `jev_score()`, and `jev_noul()` constructors with
