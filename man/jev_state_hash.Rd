@@ -15,3 +15,6 @@ A lowercase SHA-256 hexadecimal hash.
 \description{
 Hash a state using its deterministic identity representation
 }
+\examples{
+jev_state_hash(list(message = "Payouts fail", days = 3))
+}

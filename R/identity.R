@@ -132,6 +132,15 @@ jev_normalize_definition <- function(definition) {
 #' @param definition A `jev_spec` or a named list of JEV questions.
 #' @return A list containing the canonical definition fields, without its hash.
 #' @export
+#' @examples
+#' questions <- list(
+#'   priority = jev_choice(
+#'     "Which priority applies?",
+#'     c(low = "Can wait", high = "Needs attention soon")
+#'   )
+#' )
+#' spec <- jev_spec("support-routing", "1.0.0", questions)
+#' jev_definition_manifest(spec)
 jev_definition_manifest <- function(definition) {
   jev_normalize_definition(definition)
 }
@@ -141,6 +150,14 @@ jev_definition_manifest <- function(definition) {
 #' @param definition A `jev_spec` or a named list of JEV questions.
 #' @return A lowercase SHA-256 hexadecimal hash.
 #' @export
+#' @examples
+#' questions <- list(
+#'   priority = jev_choice(
+#'     "Which priority applies?",
+#'     c(low = "Can wait", high = "Needs attention soon")
+#'   )
+#' )
+#' jev_spec_hash(questions)
 jev_spec_hash <- function(definition) {
   jev_identity_hash(jev_normalize_definition(definition))
 }
@@ -150,6 +167,8 @@ jev_spec_hash <- function(definition) {
 #' @param state A JSON-compatible state value.
 #' @return A lowercase SHA-256 hexadecimal hash.
 #' @export
+#' @examples
+#' jev_state_hash(list(message = "Payouts fail", days = 3))
 jev_state_hash <- function(state) {
   jev_validate_state(state)
   jev_identity_hash(state)
@@ -166,6 +185,16 @@ jev_state_hash <- function(state) {
 #' @param routing_options Options that affect request routing semantics.
 #' @return A lowercase SHA-256 hexadecimal hash.
 #' @export
+#' @examples
+#' questions <- list(
+#'   urgent = jev_noul("Does this request convey urgency?")
+#' )
+#' jev_execution_id(
+#'   state = list(message = "Payouts fail", days = 3),
+#'   definition = questions,
+#'   provider = "typesafe",
+#'   model = "jev-latest"
+#' )
 jev_execution_id <- function(
   state,
   definition,

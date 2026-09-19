@@ -226,6 +226,21 @@ jev_map_summary <- function(items, requests, started_at, finished_at) {
 #' @param progress Display the httr2 progress indicator.
 #' @return A `jev_result_set` preserving input order and IDs.
 #' @export
+#' @examplesIf identical(Sys.getenv("JEVR_RUN_EXAMPLES"), "true") && nzchar(Sys.getenv("TYPESAFE_API_KEY"))
+#' states <- list(
+#'   incident_a = list(message = "Payouts fail", days = 3),
+#'   incident_b = list(message = "Refund pending", days = 1)
+#' )
+#' questions <- list(
+#'   urgent = jev_noul("Does this request convey urgency?")
+#' )
+#' results <- jev_map(
+#'   states = states,
+#'   questions = questions,
+#'   provider = "typesafe",
+#'   concurrency = 2
+#' )
+#' results
 jev_map <- function(
   states,
   questions,

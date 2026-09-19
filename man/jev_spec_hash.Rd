@@ -15,3 +15,12 @@ A lowercase SHA-256 hexadecimal hash.
 \description{
 Hash a JEV definition
 }
+\examples{
+questions <- list(
+  priority = jev_choice(
+    "Which priority applies?",
+    c(low = "Can wait", high = "Needs attention soon")
+  )
+)
+jev_spec_hash(questions)
+}

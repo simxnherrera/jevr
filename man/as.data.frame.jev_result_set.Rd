@@ -15,6 +15,24 @@
 
 \item{...}{Unused arguments.}
 }
+\value{
+A data frame with one row per state-question pair. \code{value},
+\code{probabilities}, and \code{legend} remain list-columns; provenance and error
+fields are returned as scalar columns.
+}
 \description{
 Convert a result set to one row per state and requested question
+}
+\examples{
+\dontshow{if (identical(Sys.getenv("JEVR_RUN_EXAMPLES"), "true") && nzchar(Sys.getenv("TYPESAFE_API_KEY"))) withAutoprint(\{ # examplesIf}
+states <- list(
+  incident_a = list(message = "Payouts fail", days = 3),
+  incident_b = list(message = "Refund pending", days = 1)
+)
+questions <- list(
+  urgent = jev_noul("Does this request convey urgency?")
+)
+results <- jev_map(states, questions, provider = "typesafe")
+as.data.frame(results)
+\dontshow{\}) # examplesIf}
 }

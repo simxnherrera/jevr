@@ -15,3 +15,13 @@ A list containing the canonical definition fields, without its hash.
 \description{
 Return the data-only manifest for a JEV definition
 }
+\examples{
+questions <- list(
+  priority = jev_choice(
+    "Which priority applies?",
+    c(low = "Can wait", high = "Needs attention soon")
+  )
+)
+spec <- jev_spec("support-routing", "1.0.0", questions)
+jev_definition_manifest(spec)
+}

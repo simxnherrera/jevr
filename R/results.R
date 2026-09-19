@@ -302,7 +302,20 @@ jev_result_question_definitions <- function(x) {
 #' @param row.names Passed to `data.frame()`.
 #' @param optional Passed to `data.frame()`.
 #' @param ... Unused arguments.
+#' @return A data frame with one row per state-question pair. `value`,
+#'   `probabilities`, and `legend` remain list-columns; provenance and error
+#'   fields are returned as scalar columns.
 #' @export
+#' @examplesIf identical(Sys.getenv("JEVR_RUN_EXAMPLES"), "true") && nzchar(Sys.getenv("TYPESAFE_API_KEY"))
+#' states <- list(
+#'   incident_a = list(message = "Payouts fail", days = 3),
+#'   incident_b = list(message = "Refund pending", days = 1)
+#' )
+#' questions <- list(
+#'   urgent = jev_noul("Does this request convey urgency?")
+#' )
+#' results <- jev_map(states, questions, provider = "typesafe")
+#' as.data.frame(results)
 as.data.frame.jev_result_set <- function(x, row.names = NULL, optional = FALSE, ...) {
   questions <- jev_result_question_definitions(x)
   items <- jev_result_set_items(x)

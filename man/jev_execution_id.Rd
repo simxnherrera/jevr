@@ -35,3 +35,14 @@ A lowercase SHA-256 hexadecimal hash.
 \description{
 Build a deterministic identity for an effective JEV execution
 }
+\examples{
+questions <- list(
+  urgent = jev_noul("Does this request convey urgency?")
+)
+jev_execution_id(
+  state = list(message = "Payouts fail", days = 3),
+  definition = questions,
+  provider = "typesafe",
+  model = "jev-latest"
+)
+}

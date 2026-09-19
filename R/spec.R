@@ -9,6 +9,19 @@
 #'
 #' @return An object of class `jev_spec`.
 #' @export
+#' @examples
+#' questions <- list(
+#'   priority = jev_choice(
+#'     "Which priority applies?",
+#'     c(low = "Can wait", high = "Needs attention soon")
+#'   ),
+#'   urgent = jev_noul("Does this request convey urgency?")
+#' )
+#' jev_spec(
+#'   name = "support-routing",
+#'   version = "1.0.0",
+#'   questions = questions
+#' )
 jev_spec <- function(name = NULL, version = NULL, questions) {
   spec <- structure(
     list(

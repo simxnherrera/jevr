@@ -206,6 +206,24 @@ spec <- jev_spec(
 The spec contains only data and a recalculable SHA-256 hash. It does not
 store credentials, provider clients, callbacks, or operational settings.
 
+Use `jev_definition_manifest()` to inspect the canonical data-only
+definition. `jev_spec_hash()` and `jev_state_hash()` provide stable
+hashes for a definition and a state. `jev_execution_id()` combines the
+state, definition, provider, model, and inference semantics into a
+reproducible execution identity:
+
+``` r
+jev_definition_manifest(spec)
+jev_spec_hash(spec)
+jev_state_hash(list(document = "First document"))
+jev_execution_id(
+  state = list(document = "First document"),
+  definition = spec,
+  provider = "typesafe",
+  model = "jev-latest"
+)
+```
+
 `jev_map()` evaluates explicit states with bounded concurrency and
 returns a named `jev_result_set`. Failures stay attached to their state
 instead of aborting the whole collection:
@@ -246,5 +264,6 @@ fields:
 - `metadata`: provider and upstream request metadata.
 - `raw`: the unmodified provider response.
 
-Use `?jev_ask`, `?jev_map`, `?jev_spec`, `?jev_choice`, `?jev_score`,
-and `?jev_noul` for the complete argument reference.
+Use `?jev_ask`, `?jev_map`, `?jev_spec`, `?jev_definition_manifest`,
+`?jev_spec_hash`, `?jev_state_hash`, `?jev_execution_id`, `?jev_choice`,
+`?jev_score`, and `?jev_noul` for the complete argument reference.
