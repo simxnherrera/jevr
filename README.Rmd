@@ -13,25 +13,15 @@ output:
 [![R-CMD-check](https://github.com/simxnherrera/jevr/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/simxnherrera/jevr/actions/workflows/R-CMD-check.yaml)
 <!-- badges: end -->
 
-jevr is a small native R client for [JEV / TypeSafe System One](https://docs.typesafe.ai/concepts/system-one).
-It turns a state and a set of typed questions into structured decisions:
+`jevr` is an R client for [JEV / TypeSafe System One](https://docs.typesafe.ai/concepts/system-one).
+It sends a state and a set of typed questions to a model and returns structured
+answers that can be used directly in R.
 
-```text
-state + questions -> model -> typed answers
-```
-
-System One is a decision interface, not a conversational chat interface. The
-package therefore focuses on typed questions, batched requests, probabilities,
-confidence, and provider-independent response objects. It does not expose chat
-history, token streaming, or tool calling.
+JEV is designed for structured decisions rather than conversational chat. The
+package supports batched questions, probabilities, confidence, usage, and
+provider metadata.
 
 ## Installation
-
-After a CRAN release, install the stable version with:
-
-```{r, eval=FALSE}
-install.packages("jevr")
-```
 
 Install the development version from GitHub:
 
@@ -40,37 +30,35 @@ install.packages("pak")
 pak::pak("simxnherrera/jevr")
 ```
 
-For local development:
+Once `jevr` is available on CRAN, the stable version can be installed with:
 
 ```{r, eval=FALSE}
-pak::pak("devtools")
-devtools::load_all()
+install.packages("jevr")
 ```
 
-## Credentials
+## Authentication
 
-Use an environment variable for the provider you select. Do not put API keys
-in package code, tests, or committed files.
+Set the API key for the provider you want to use in your `.Renviron` file:
 
 ```{r, eval=FALSE}
 usethis::edit_r_environ()
 ```
 
 ```text
-# For direct TypeSafe requests:
+# Direct TypeSafe requests
 TYPESAFE_API_KEY=your_typesafe_key
 
-# For OpenRouter requests:
+# OpenRouter requests
 OPENROUTER_API_KEY=your_openrouter_key
 ```
 
-The key is read when jev_ask() is called. The package never prints it in
-errors or stores it in the repository.
+Keys are read when `jev_ask()` is called and are not included in returned
+objects.
 
-## First request
+## Basic usage
 
-The public API has four functions: jev_ask(), jev_choice(), jev_score(), and
-jev_noul().
+Define one or more questions, then pass them together with the state to
+`jev_ask()`:
 
 ```{r, eval=FALSE}
 library(jevr)
@@ -94,25 +82,27 @@ result <- jev_ask(
   questions = questions
 )
 
-result$model
 result$answers$department$choice
 result$answers$department$probabilities
 result$answers$urgent$noul
 ```
 
-Question IDs come from the names of the questions list. They are preserved
-in the request and in result$answers, so multiple questions can be sent in a
-single request without losing the mapping between a question and its answer.
+The names in `questions` become the IDs in `result$answers`. This makes it
+possible to send several questions in one request without losing the mapping
+between each question and its answer.
 
-## Typed questions
+`state` can be a character string, a named list representing a JSON object, or
+an unnamed list representing a JSON array.
+
+## Question types
 
 ### Choice
 
-jev_choice() selects one named option and preserves the full probability
-distribution and confidence:
+`jev_choice()` selects one option from a named set. The answer contains the
+selected option, the probability for each option, and model confidence.
 
 ```{r, eval=FALSE}
-question <- jev_choice(
+jev_choice(
   instructions = "Which priority applies?",
   criteria = c(
     low = "Can wait",
@@ -123,11 +113,11 @@ question <- jev_choice(
 
 ### Score
 
-jev_score() returns an ordered score, its legend, probabilities, and
-confidence:
+`jev_score()` places the state along an ordered scale of two to ten levels. The
+answer contains the score, its legend, probabilities, and confidence.
 
 ```{r, eval=FALSE}
-question <- jev_score(
+jev_score(
   instructions = "How severe is the issue?",
   criteria = c(
     "Minor inconvenience",
@@ -139,11 +129,11 @@ question <- jev_score(
 
 ### Noul
 
-jev_noul() returns the continuous value between 0 and 1. It does not silently
-convert that value to TRUE or FALSE:
+`jev_noul()` estimates how strongly a statement is true and returns a numeric
+value between 0 and 1. The value is not converted to `TRUE` or `FALSE`.
 
 ```{r, eval=FALSE}
-question <- jev_noul(
+jev_noul(
   instructions = "Does the request require immediate action?",
   criteria = list(
     true = "The request describes an immediate operational risk",
@@ -156,9 +146,8 @@ question <- jev_noul(
 
 ### TypeSafe
 
-TypeSafe is the default provider. jevr sends a batched request to the
-official System One endpoint and uses the stable jev-latest model alias by
-default.
+TypeSafe is the default provider. It uses the `jev-latest` model alias unless a
+different `model` is supplied:
 
 ```{r, eval=FALSE}
 result <- jev_ask(
@@ -171,14 +160,12 @@ result <- jev_ask(
 )
 ```
 
-state may be a character value, a named list representing a JSON object, or an
-unnamed list representing a JSON array. The package keeps those structures as
-structured JSON when the provider supports them.
+The direct TypeSafe provider supports structured JSON values for `state`,
+`instructions`, and criteria.
 
 ### OpenRouter
 
-OpenRouter is available through its Decisions endpoint. Select it without
-changing the question definitions:
+OpenRouter can be selected without changing the question definitions:
 
 ```{r, eval=FALSE}
 result <- jev_ask(
@@ -188,29 +175,62 @@ result <- jev_ask(
 )
 ```
 
-OpenRouter uses ~typesafe/jev-latest by default and authenticates with
-OPENROUTER_API_KEY. Its current Decisions schema accepts textual instructions
-and criteria; use the direct TypeSafe provider when you need structured
-instruction or criteria values.
+It uses `~typesafe/jev-latest` by default and authenticates with
+`OPENROUTER_API_KEY`. Structured JSON instructions and criteria are preserved
+when the provider contract accepts them.
 
-## Development
+## Versioned specifications and multiple states
 
-The package follows the workflow from [R Packages (2e)](https://r-pkgs.org/):
+Use `jev_spec()` when a definition must be identified and compared over time:
 
 ```{r, eval=FALSE}
-devtools::load_all()
-devtools::document()
-devtools::test()
-devtools::check()
+spec <- jev_spec(
+  name = "claim_validation",
+  version = "1.0.0",
+  questions = questions
+)
 ```
 
-Normal tests mock the HTTP layer and do not require credentials or make
-network requests. Paid live integration tests are skipped on CRAN and unless
-you explicitly set JEVR_RUN_INTEGRATION_TESTS=true together with the relevant
-provider key.
+The spec contains only data and a recalculable SHA-256 hash. It does not store
+credentials, provider clients, callbacks, or operational settings.
 
-## Status
+`jev_map()` evaluates explicit states with bounded concurrency and returns a
+named `jev_result_set`. Failures stay attached to their state instead of
+aborting the whole collection:
 
-The initial API and provider contracts are intentionally small; the package
-does not provide a chat interface, streaming, tool calling, or bulk
-classification helpers.
+```{r, eval=FALSE}
+states <- c(
+  document_001 = "First document",
+  document_002 = "Second document"
+)
+
+results <- jev_map(
+  states,
+  spec,
+  concurrency = 4,
+  on_result = function(result) {
+    # Persist the terminal result in caller-owned storage.
+  }
+)
+
+as.data.frame(results)
+attr(results, "requests")
+```
+
+The callback is the persistence boundary: jevr does not manage a database,
+checkpoint files, or a distributed job queue. For large sources, read chunks
+outside the package and call `jev_map()` for each chunk. `concurrency` limits
+requests in flight; `rate_limit` controls admission separately.
+
+## Response object
+
+`jev_ask()` returns an object of class `jev_response` with these main fields:
+
+- `model`: model used for the request.
+- `answers`: named answers corresponding to the supplied questions.
+- `usage`: input and output token counts returned by the provider.
+- `metadata`: provider and upstream request metadata.
+- `raw`: the unmodified provider response.
+
+Use `?jev_ask`, `?jev_map`, `?jev_spec`, `?jev_choice`, `?jev_score`, and
+`?jev_noul` for the complete argument reference.

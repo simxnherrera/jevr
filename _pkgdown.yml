@@ -1,0 +1,18 @@
+url: https://github.com/simxnherrera/jevr
+
+reference:
+  - title: Decision execution
+    contents:
+      - jev_ask
+      - jev_map
+      - jev_spec
+      - jev_definition_manifest
+      - jev_spec_hash
+      - jev_state_hash
+      - jev_execution_id
+      - as.data.frame.jev_result_set
+  - title: Questions
+    contents:
+      - jev_choice
+      - jev_score
+      - jev_noul
