@@ -9,42 +9,42 @@ jev_request_payload <- function(state, questions, model) {
   )
 }
 
-jev_validate_questions <- function(questions) {
-  if (!is.list(questions) || length(questions) == 0L) {
-    jev_abort(
-      "questions must be a non-empty named list of JEV questions.",
-      class = "jev_input_error"
-    )
-  }
-
-  ids <- names(questions)
-  if (is.null(ids) || anyNA(ids) || any(!nzchar(ids))) {
-    jev_abort(
-      "questions must have a non-empty ID for every question.",
-      class = "jev_input_error"
-    )
-  }
-
-  if (anyDuplicated(ids)) {
-    jev_abort(
-      "questions cannot contain duplicate question IDs.",
-      class = "jev_input_error"
-    )
-  }
-
-  valid <- vapply(questions, inherits, logical(1), what = "jev_question")
-  if (any(!valid)) {
-    invalid <- ids[which(!valid)[[1L]]]
-    jev_abort(
-      paste0(
-        "Question ", invalid,
-        " is not a jev_choice(), jev_score(), or jev_noul() object."
-      ),
-      class = "jev_input_error"
-    )
+jev_questions_value <- function(questions) {
+  if (inherits(questions, "jev_spec")) {
+    jev_validate_spec(questions)
+    return(jev_questions_from_manifest(questions$questions))
   }
 
   questions
+}
+
+jev_build_provider_request <- function(
+  provider,
+  state,
+  questions,
+  model,
+  timeout,
+  rate_limit = NULL
+) {
+  questions <- jev_questions_value(questions)
+
+  switch(
+    provider,
+    typesafe = jev_build_typesafe_request(
+      state = state,
+      questions = questions,
+      model = model,
+      timeout = timeout,
+      rate_limit = rate_limit
+    ),
+    openrouter = jev_build_openrouter_request(
+      state = state,
+      questions = questions,
+      model = model,
+      timeout = timeout,
+      rate_limit = rate_limit
+    )
+  )
 }
 
 jev_validate_request_options <- function(timeout, max_retries) {
@@ -120,6 +120,7 @@ jev_ask <- function(
 ) {
   provider <- match.arg(provider)
   state <- jev_validate_state(state)
+  questions <- jev_questions_value(questions)
   questions <- jev_validate_questions(questions)
   jev_validate_request_options(timeout, max_retries)
 
@@ -135,19 +136,28 @@ jev_ask <- function(
     )
   }
 
-  provider_result <- switch(provider,
-    typesafe = jev_request_typesafe(
-      state, questions, model, timeout, as.integer(max_retries)
-    ),
-    openrouter = jev_request_openrouter(
-      state, questions, model, timeout, as.integer(max_retries)
-    )
+  provider_request <- jev_build_provider_request(
+    provider = provider,
+    state = state,
+    questions = questions,
+    model = model,
+    timeout = timeout
   )
+  response <- jev_send_request(
+    provider_request$request,
+    provider = provider,
+    max_retries = as.integer(max_retries)
+  )
+  body <- jev_body_json(response, provider)
 
-  question_types <- vapply(
-    questions,
-    function(question) question$type,
-    character(1)
+  result <- jev_parse_response(
+    body,
+    provider,
+    questions
   )
-  jev_parse_response(provider_result$body, provider, question_types)
+  result$metadata <- utils::modifyList(
+    result$metadata,
+    jev_response_metadata(response, provider)
+  )
+  result
 }

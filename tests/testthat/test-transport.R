@@ -48,6 +48,13 @@ test_that("retry count is bounded", {
   expect_length(waits, 2L)
   expect_equal(jev_retry_delay(1L), 0.5)
   expect_equal(jev_retry_delay(2L), 1)
+  expect_equal(
+    jev_retry_delay(
+      1L,
+      httr2::response(status_code = 429, headers = list("Retry-After-Ms" = "1500"))
+    ),
+    1.5
+  )
 })
 
 test_that("connection errors retry without making the loop unbounded", {

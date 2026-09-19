@@ -1,3 +1,8 @@
+expect_jev_response_error <- function(expr) {
+  condition <- tryCatch(force(expr), error = identity)
+  expect_s3_class(condition, "jev_response_error")
+}
+
 test_that("response parsing keeps all typed answer fields", {
   raw <- list(
     id = "response-1",
@@ -28,13 +33,16 @@ test_that("response parsing keeps all typed answer fields", {
     ),
     usage = list(input_tokens = 50, output_tokens = 12, cost = 0.001)
   )
-  question_types <- c(
-    department = "choice",
-    severity = "score",
-    urgent = "noul"
+  questions <- list(
+    department = jev_choice("Which department?", c(
+      billing = "Billing",
+      technical = "Technical"
+    )),
+    severity = jev_score("How severe?", c("Low", "Medium", "High")),
+    urgent = jev_noul("Is it urgent?")
   )
 
-  result <- jev_parse_response(raw, "typesafe", question_types)
+  result <- jev_parse_response(raw, "typesafe", questions)
 
   expect_s3_class(result, "jev_response")
   expect_s3_class(result$answers$department, "jev_choice_answer")
@@ -42,6 +50,7 @@ test_that("response parsing keeps all typed answer fields", {
   expect_s3_class(result$answers$urgent, "jev_noul_answer")
   expect_equal(result$answers$department$probabilities[["technical"]], 0.9)
   expect_equal(result$answers$department$extra, "preserved")
+  expect_type(result$answers$severity$legend, "character")
   expect_equal(result$answers$severity$legend[["2"]], "High")
   expect_equal(result$answers$severity$probabilities[["1"]], 0.55)
   expect_equal(result$answers$urgent$noul, 0.73)
@@ -60,10 +69,159 @@ test_that("incomplete responses fail with the missing field", {
 
   expect_snapshot(
     error = TRUE,
+    jev_parse_response(incomplete, "typesafe", c(department = "choice"))
+  )
+})
+
+test_that("response parsing rejects an unknown choice", {
+  response <- list(
+    model = "jev-latest",
+    answers = list(
+      department = list(
+        type = "choice",
+        choice = "legal",
+        probabilities = list(billing = 0.5, technical = 0.5)
+      )
+    ),
+    usage = list()
+  )
+
+  expect_jev_response_error(
     jev_parse_response(
-      incomplete,
+      response,
       "typesafe",
-      c(department = "choice")
+      list(department = jev_choice("Which department?", c(
+        billing = "Billing", technical = "Technical"
+      )))
+    )
+  )
+})
+
+test_that("response parsing checks probability keys and sums", {
+  response <- list(
+    model = "jev-latest",
+    answers = list(
+      department = list(
+        type = "choice",
+        choice = "billing",
+        probabilities = list(billing = 0.2, technical = 0.2)
+      )
+    ),
+    usage = list()
+  )
+
+  expect_jev_response_error(
+    jev_parse_response(
+      response,
+      "typesafe",
+      list(department = jev_choice("Which department?", c(
+        billing = "Billing", technical = "Technical"
+      )))
+    )
+  )
+})
+
+test_that("response parsing requires the complete answer ID set", {
+  response <- list(
+    model = "jev-latest",
+    answers = list(
+      department = list(
+        type = "choice",
+        choice = "billing",
+        probabilities = list(billing = 0.5, technical = 0.5),
+        confidence = 0.5
+      ),
+      extra = list(type = "noul", noul = 0.5)
+    ),
+    usage = list()
+  )
+
+  expect_jev_response_error(
+    jev_parse_response(
+      response,
+      "typesafe",
+      list(department = jev_choice("Which department?", c(
+        billing = "Billing", technical = "Technical"
+      )))
+    )
+  )
+})
+
+test_that("response parsing checks score scale and preserves structured legends", {
+  response <- list(
+    model = "jev-latest",
+    answers = list(
+      severity = list(
+        type = "score",
+        score = 3.1,
+        legend = list(
+          `0` = list(label = "Low"),
+          `1` = list(label = "Medium"),
+          `2` = list(label = "High")
+        ),
+        probabilities = list(`0` = 0.2, `1` = 0.3, `2` = 0.5),
+        confidence = 0.7
+      )
+    ),
+    usage = list()
+  )
+
+  expect_jev_response_error(
+    jev_parse_response(
+      response,
+      "typesafe",
+      list(severity = jev_score("How severe?", c("Low", "Medium", "High")))
+    )
+  )
+
+  response$answers$severity$score <- 1.5
+  result <- jev_parse_response(
+    response,
+    "typesafe",
+    list(severity = jev_score("How severe?", c("Low", "Medium", "High")))
+  )
+  expect_type(result$answers$severity$legend, "list")
+  expect_equal(result$answers$severity$legend[["1"]]$label, "Medium")
+})
+
+test_that("incomplete usage uses NA for unknown counters", {
+  response <- list(
+    model = "jev-latest",
+    answers = list(urgent = list(type = "noul", noul = 0.4)),
+    usage = list(input_tokens = 3, provider_note = "not reported")
+  )
+
+  result <- jev_parse_response(
+    response,
+    "typesafe",
+    list(urgent = jev_noul("Is it urgent?"))
+  )
+
+  expect_equal(result$usage$input_tokens, 3)
+  expect_true(is.na(result$usage$output_tokens))
+  expect_equal(result$usage$provider_note, "not reported")
+})
+
+test_that("missing usage is valid and invalid usage is rejected", {
+  response <- list(
+    model = "jev-latest",
+    answers = list(urgent = list(type = "noul", noul = 0.4))
+  )
+
+  result <- jev_parse_response(
+    response,
+    "typesafe",
+    list(urgent = jev_noul("Is it urgent?"))
+  )
+  expect_true(is.na(result$usage$input_tokens))
+  expect_true(is.na(result$usage$output_tokens))
+
+  response$usage <- list(input_tokens = -1, output_tokens = 2)
+  expect_jev_response_error(
+    jev_parse_response(
+      response,
+      "typesafe",
+      list(urgent = jev_noul("Is it urgent?"))
     )
   )
 })

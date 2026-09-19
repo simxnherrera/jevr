@@ -59,7 +59,12 @@ jev_http_error <- function(status, provider, body, attempts) {
   jev_abort(
     message,
     class = "jev_http_error",
-    details = list(status = status, provider = provider, body = body)
+    details = list(
+      status = status,
+      provider = provider,
+      attempts = attempts,
+      body = body
+    )
   )
 }
 

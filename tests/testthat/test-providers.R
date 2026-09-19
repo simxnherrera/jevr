@@ -65,7 +65,7 @@ test_that("OpenRouter serializes choice criteria as a JSON object", {
         paste0(
           '{"model":"typesafe/jev-1.13",',
           '"answers":{"department":{"type":"choice",',
-          '"choice":"technical","probabilities":{"technical":1},',
+          '"choice":"technical","probabilities":{"billing":0,"technical":1},',
           '"confidence":1}},',
           '"usage":{"input_tokens":1,"output_tokens":1}}'
         )
@@ -95,22 +95,47 @@ test_that("OpenRouter serializes choice criteria as a JSON object", {
   )
 })
 
-test_that("OpenRouter reports its current string-only question constraint", {
+test_that("OpenRouter preserves structured question values", {
   withr::local_envvar(OPENROUTER_API_KEY = "fake-openrouter-key")
+  captured_request <- NULL
+  mock <- function(req) {
+    captured_request <<- req
+    httr2::response(
+      status_code = 200,
+      headers = list("Content-Type" = "application/json"),
+      body = charToRaw(
+        paste0(
+          '{"model":"typesafe/jev-1.13","answers":{"choice":',
+          '{"type":"choice","choice":"first",',
+          '"probabilities":{"first":1,"second":0},"confidence":1}},',
+          '"usage":{"input_tokens":1,"output_tokens":1}}'
+        )
+      )
+    )
+  }
 
-  expect_snapshot(
-    error = TRUE,
+  httr2::with_mocked_responses(
+    mock,
     jev_ask(
       state = "text",
       questions = list(
         choice = jev_choice(
           instructions = list(question = "Which option?"),
-          criteria = c(first = "First", second = "Second")
+          criteria = list(
+            first = list(label = "First"),
+            second = list(label = "Second")
+          )
         )
       ),
       provider = "openrouter",
       max_retries = 0
     )
+  )
+
+  expect_type(captured_request$body$data$questions$choice$instructions, "list")
+  expect_equal(
+    captured_request$body$data$questions$choice$criteria$first$label,
+    "First"
   )
 })
 

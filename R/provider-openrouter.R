@@ -1,39 +1,36 @@
-jev_openrouter_text <- function(value, argument) {
-  if (is.null(value)) {
-    return("")
-  }
-
-  if (is.character(value) && length(value) == 1L && !is.na(value)) {
-    return(value)
-  }
-
-  jev_abort(
-    paste0(
-      "OpenRouter Decisions currently accepts string values for ", argument,
-      "; use a string or call jev_ask() with provider = typesafe."
-    ),
-    class = "jev_provider_error"
+jev_openrouter_value <- function(value, argument, allow_null = FALSE) {
+  tryCatch(
+    jev_validate_json_value(value, argument, allow_null = allow_null),
+    jev_input_error = function(error) {
+      jev_abort(
+        paste0(
+          "OpenRouter Decisions cannot encode ", argument,
+          "; use a JSON value supported by the provider."
+        ),
+        class = "jev_provider_error",
+        details = list(provider = "openrouter", argument = argument, cause = error)
+      )
+    }
   )
 }
 
 jev_openrouter_question <- function(question, id) {
-  instructions <- jev_openrouter_text(
+  instructions <- jev_openrouter_value(
     question$instructions,
     paste0("questions$", id, "$instructions")
   )
 
   if (identical(question$type, "choice")) {
-    criteria <- vapply(
+    criteria <- lapply(
       names(question$criteria),
       function(name) {
-        jev_openrouter_text(
+        jev_openrouter_value(
           question$criteria[[name]],
-          paste0("questions$", id, "$criteria$", name)
+          paste0("questions$", id, "$criteria$", name),
+          allow_null = TRUE
         )
-      },
-      character(1)
+      }
     )
-    criteria <- as.list(criteria)
     names(criteria) <- names(question$criteria)
 
     return(list(
@@ -44,15 +41,14 @@ jev_openrouter_question <- function(question, id) {
   }
 
   if (identical(question$type, "score")) {
-    criteria <- vapply(
+    criteria <- lapply(
       seq_along(question$criteria),
       function(index) {
-        jev_openrouter_text(
+        jev_openrouter_value(
           question$criteria[[index]],
           paste0("questions$", id, "$criteria[[", index, "]]")
         )
-      },
-      character(1)
+      }
     )
 
     return(list(
@@ -70,13 +66,15 @@ jev_openrouter_question <- function(question, id) {
     type = "noul",
     instructions = instructions,
     criteria = list(
-      true = jev_openrouter_text(
+      true = jev_openrouter_value(
         question$criteria$true,
-        paste0("questions$", id, "$criteria$true")
+        paste0("questions$", id, "$criteria$true"),
+        allow_null = TRUE
       ),
-      false = jev_openrouter_text(
+      false = jev_openrouter_value(
         question$criteria$false,
-        paste0("questions$", id, "$criteria$false")
+        paste0("questions$", id, "$criteria$false"),
+        allow_null = TRUE
       )
     )
   )
@@ -91,14 +89,14 @@ jev_openrouter_questions <- function(questions) {
   result
 }
 
-jev_request_openrouter <- function(
+jev_build_openrouter_request <- function(
   state,
   questions,
   model,
   timeout,
-  max_retries
+  rate_limit = NULL,
+  api_key = jev_api_key("openrouter")
 ) {
-  api_key <- jev_api_key("openrouter")
   payload <- list(
     model = model,
     state = state,
@@ -109,6 +107,8 @@ jev_request_openrouter <- function(
     payload = payload,
     api_key = api_key,
     timeout = timeout,
+    rate_limit = rate_limit,
+    throttle_realm = "jevr-openrouter",
     headers = stats::setNames(
       c(
         "https://github.com/simxnherrera/jevr",
@@ -117,10 +117,28 @@ jev_request_openrouter <- function(
       c("HTTP-Referer", "X-OpenRouter-Title")
     )
   )
+  list(request = request, provider = "openrouter")
+}
+
+jev_request_openrouter <- function(
+  state,
+  questions,
+  model,
+  timeout,
+  max_retries,
+  retry_budget = Inf
+) {
+  built <- jev_build_openrouter_request(
+    state = state,
+    questions = questions,
+    model = model,
+    timeout = timeout
+  )
   response <- jev_send_request(
-    request,
+    built$request,
     provider = "openrouter",
-    max_retries = max_retries
+    max_retries = max_retries,
+    retry_budget = retry_budget
   )
 
   list(body = jev_body_json(response, "openrouter"), response = response)
