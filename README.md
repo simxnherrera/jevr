@@ -24,8 +24,8 @@ a set of typed questions to a model and returns structured answers that
 can be used directly in R.
 
 JEV is designed for structured decisions rather than conversational
-chat. The package supports batched questions, probabilities, confidence,
-usage, and provider metadata.
+chat. The package supports multiple questions in one evaluation,
+probabilities, confidence, usage, and provider metadata.
 
 ## Installation
 
@@ -98,6 +98,12 @@ result$answers$urgent$noul
 The names in `questions` become the IDs in `result$answers`. This makes
 it possible to send several questions in one request without losing the
 mapping between each question and its answer.
+
+`jev_ask(state, questions)` represents one evaluation of one state. For
+a collection of states, use `jev_map(states, questions)`: each state is
+evaluated independently, with bounded HTTP concurrency. `jev_map()` is
+not model-level batching of multiple records into one state or one
+request.
 
 `state` can be a character string, a named list representing a JSON
 object, or an unnamed list representing a JSON array.
@@ -224,9 +230,9 @@ jev_execution_id(
 )
 ```
 
-`jev_map()` evaluates explicit states with bounded concurrency and
-returns a named `jev_result_set`. Failures stay attached to their state
-instead of aborting the whole collection:
+`jev_map()` evaluates explicit states independently with bounded
+concurrency and returns a named `jev_result_set`. Failures stay attached
+to their state instead of aborting the whole collection:
 
 ``` r
 states <- c(
@@ -252,6 +258,26 @@ database, checkpoint files, or a distributed job queue. For large
 sources, read chunks outside the package and call `jev_map()` for each
 chunk. `concurrency` limits requests in flight; `rate_limit` controls
 admission separately.
+
+When the provider returns a valid response envelope but an individual
+answer cannot be validated, `jev_map()` returns `status = "partial"`,
+keeps the valid answers, and records the invalid questions in
+`question_errors`. The raw response remains available for audit.
+`attr(results, "requests")` contains one row per physical HTTP attempt;
+`duration_seconds` is the per-response HTTP timing reported by httr2 and
+can be `NA` when the backend does not provide a reliable value.
+Per-request ledger timestamps are `NA` because the public parallel API
+does not expose reliable start and finish timestamps after the wave
+returns.
+
+The development cancellation probe also documents a limitation of the
+current public httr2 API: when an active wave is interrupted and httr2
+drains every active request, it can return a complete response list
+without an explicit interrupted flag. jevr handles observable `NULL`
+results conservatively, but cannot distinguish that drained wave from a
+normal wave. Closing that gate requires a transport adapter that returns
+an explicit interrupted flag; jevr does not introduce a second transport
+backend in this release.
 
 ## Response object
 

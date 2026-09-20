@@ -2,7 +2,7 @@
 % Please edit documentation in R/ask.R
 \name{jev_ask}
 \alias{jev_ask}
-\title{Ask one or more JEV questions about a state}
+\title{Evaluate one state with one or more JEV questions}
 \usage{
 jev_ask(
   state,
@@ -19,7 +19,8 @@ for simple text, a named list for a JSON object, or an unnamed list for a
 JSON array. Other JSON-serializable R values are passed to the provider.}
 
 \item{questions}{A non-empty named list of questions created with
-jev_choice(), jev_score(), or jev_noul(). The names become answer IDs.}
+jev_choice(), jev_score(), or jev_noul(), or a \code{jev_spec()} object. The
+names become answer IDs.}
 
 \item{provider}{Provider to use: "typesafe" for the direct TypeSafe API or
 "openrouter" for OpenRouter's Decisions endpoint.}
@@ -37,9 +38,14 @@ An object of class jev_response with model, typed answers, usage,
 provider metadata, and the unmodified response in raw.
 }
 \description{
-jev_ask() sends one state and a named batch of independent typed questions
-to a System One provider. Questions are evaluated together, and the answer
-IDs are the names supplied in questions.
+\code{jev_ask()} represents one evaluation: it sends one state and a named set
+of independent typed questions to a System One provider. Questions are
+evaluated together, and the answer IDs are the names supplied in questions.
+}
+\details{
+\code{jev_ask()} keeps strict response parsing for compatibility: an
+invalid envelope or answer raises an error for the evaluation. Use
+\code{jev_map()} when collection-level partial results are needed.
 }
 \section{Authentication}{
 

@@ -68,17 +68,18 @@ jev_validate_request_options <- function(timeout, max_retries) {
   invisible(NULL)
 }
 
-#' Ask one or more JEV questions about a state
+#' Evaluate one state with one or more JEV questions
 #'
-#' jev_ask() sends one state and a named batch of independent typed questions
-#' to a System One provider. Questions are evaluated together, and the answer
-#' IDs are the names supplied in questions.
+#' `jev_ask()` represents one evaluation: it sends one state and a named set
+#' of independent typed questions to a System One provider. Questions are
+#' evaluated together, and the answer IDs are the names supplied in questions.
 #'
 #' @param state Content for the evaluation. Use a length-one character string
 #'   for simple text, a named list for a JSON object, or an unnamed list for a
 #'   JSON array. Other JSON-serializable R values are passed to the provider.
 #' @param questions A non-empty named list of questions created with
-#'   jev_choice(), jev_score(), or jev_noul(). The names become answer IDs.
+#'   jev_choice(), jev_score(), or jev_noul(), or a `jev_spec()` object. The
+#'   names become answer IDs.
 #' @param provider Provider to use: "typesafe" for the direct TypeSafe API or
 #'   "openrouter" for OpenRouter's Decisions endpoint.
 #' @param model Model name. Defaults to the stable jev-latest alias for
@@ -89,6 +90,9 @@ jev_validate_request_options <- function(timeout, max_retries) {
 #'
 #' @return An object of class jev_response with model, typed answers, usage,
 #'   provider metadata, and the unmodified response in raw.
+#' @details `jev_ask()` keeps strict response parsing for compatibility: an
+#'   invalid envelope or answer raises an error for the evaluation. Use
+#'   `jev_map()` when collection-level partial results are needed.
 #'
 #' @section Authentication:
 #' Set TYPESAFE_API_KEY for the direct TypeSafe provider or

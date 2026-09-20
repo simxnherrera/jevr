@@ -133,11 +133,26 @@ jev_is_retryable_condition <- function(condition) {
       "timeout_error",
       "connection_error"
     )
-  ) || grepl(
-    "connection|timed? ?out|timeout|could not resolve|reset by peer",
-    conditionMessage(condition),
-    ignore.case = TRUE
   )
+}
+
+jev_http_duration <- function(response, timing = httr2::resp_timing) {
+  if (!inherits(response, "httr2_response")) {
+    return(NA_real_)
+  }
+
+  values <- tryCatch(timing(response), error = function(error) NULL)
+  if (!is.numeric(values) || is.null(names(values)) ||
+    !"total" %in% names(values)) {
+    return(NA_real_)
+  }
+
+  total <- unname(values[["total"]])
+  if (length(total) != 1L || is.na(total) || !is.finite(total) || total < 0) {
+    return(NA_real_)
+  }
+
+  as.numeric(total)
 }
 
 jev_send_request <- function(
@@ -172,6 +187,10 @@ jev_send_request <- function(
 
     if (inherits(result, "condition")) {
       retryable <- jev_is_retryable_condition(result)
+      if (!retryable) {
+        stop(result)
+      }
+
       if (retryable && attempt <= max_retries) {
         delay <- jev_retry_delay(attempt, jitter = jitter, random = random)
         if (is.finite(retry_budget) && now() + delay - started_at > retry_budget) {
@@ -189,7 +208,7 @@ jev_send_request <- function(
               provider = provider,
               attempts = attempt,
               retryable = TRUE,
-              cause = result
+              cause_message = conditionMessage(result)
             )
           )
         }
@@ -212,7 +231,7 @@ jev_send_request <- function(
           provider = provider,
           attempts = attempt,
           retryable = retryable,
-          cause = result
+          cause_message = conditionMessage(result)
         )
       )
     }

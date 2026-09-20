@@ -2,10 +2,6 @@ jev_executor_now <- function() {
   unname(proc.time()[["elapsed"]])
 }
 
-jev_executor_timestamp <- function() {
-  format(Sys.time(), tz = "UTC", usetz = TRUE)
-}
-
 jev_map_condition <- function(message, class, details = list()) {
   structure(
     c(list(message = message), details),
@@ -18,7 +14,7 @@ jev_map_condition_class <- function(error) {
     return(class(error)[[1L]])
   }
 
-  if (inherits(error, "httr2_failure")) {
+  if (jev_is_retryable_condition(error)) {
     return("jev_transport_error")
   }
 
@@ -43,7 +39,8 @@ jev_map_condition_details <- function(error) {
   }
 
   error[names(error) %in% c(
-    "status", "provider", "attempts", "retryable", "retry_at"
+    "status", "provider", "attempts", "retryable", "retry_at", "scope",
+    "field_path", "request_id"
   )]
 }
 
@@ -100,10 +97,17 @@ jev_map_request_row <- function(
   )
 }
 
-jev_map_terminal <- function(item, status, error = NULL, response = NULL) {
+jev_map_terminal <- function(
+  item,
+  status,
+  error = NULL,
+  response = NULL,
+  question_errors = item$question_errors
+) {
   item$status <- status
   item$error <- jev_map_as_error(error)
   item$response <- response
+  item$question_errors <- question_errors
   item
 }
 
@@ -161,6 +165,7 @@ jev_execute_map <- function(
   sleep = Sys.sleep,
   now = jev_executor_now,
   random = stats::runif,
+  response_timing = httr2::resp_timing,
   delivered = integer()
 ) {
   requests <- jev_empty_attempt_ledger()
@@ -244,6 +249,9 @@ jev_execute_map <- function(
       )
 
       if (inherits(built, "condition")) {
+        if (!inherits(built, c("jev_input_error", "jev_provider_error"))) {
+          stop(built)
+        }
         items[[index]] <- jev_map_terminal(item, "invalid_input", built)
         terminal_indices <- c(terminal_indices, index)
         wave_outcomes <- c(wave_outcomes, "terminal_error")
@@ -262,21 +270,31 @@ jev_execute_map <- function(
           progress = progress,
           max_active = concurrency
         ),
-        interrupt = function(error) {
-          attr(error, "jev_interrupt") <- TRUE
-          error
-        },
+        interrupt = identity,
         error = identity
       )
 
       if (inherits(responses, "condition")) {
+        if (!inherits(responses, c("interrupt", "httr2_failure"))) {
+          stop(responses)
+        }
+
         run_status <- if (inherits(responses, "interrupt")) {
           "cancelled"
         } else {
           "error"
         }
         for (index in request_indices) {
-          items[[index]] <- jev_map_terminal(items[[index]], "cancelled", responses)
+          terminal_status <- if (inherits(responses, "interrupt")) {
+            "cancelled"
+          } else {
+            "transport_error"
+          }
+          items[[index]] <- jev_map_terminal(
+            items[[index]],
+            terminal_status,
+            responses
+          )
           terminal_indices <- c(terminal_indices, index)
           wave_outcomes <- c(wave_outcomes, "cancelled")
         }
@@ -299,24 +317,47 @@ jev_execute_map <- function(
         }
         stop_admission <- TRUE
       } else {
+        null_positions <- which(vapply(responses, is.null, logical(1)))
+        if (length(null_positions) > 0L) {
+          run_status <- "cancelled"
+          stop_admission <- TRUE
+        }
+
         for (position in seq_along(request_indices)) {
           index <- request_indices[[position]]
           item <- items[[index]]
+          response <- responses[[position]]
+
+          if (is.null(response)) {
+            items[[index]] <- jev_map_terminal(
+              item,
+              "cancelled",
+              jev_map_condition(
+                "The parallel transport backend returned no response; execution was stopped.",
+                "jev_executor_error"
+              )
+            )
+            terminal_indices <- c(terminal_indices, index)
+            wave_outcomes <- c(wave_outcomes, "cancelled")
+            next
+          }
+
           item$attempts <- item$attempts + 1L
           request_ref <- paste0(
             item$provenance$execution_id,
+            "-input-",
+            item$input_index,
             "-attempt-",
             item$attempts
           )
           item$request_ref <- request_ref
-          started_at <- jev_executor_timestamp()
-          started_clock <- now()
-          response <- responses[[position]]
           status <- NA_integer_
           body <- NULL
           outcome <- "transport_error"
           error <- NULL
           parsed <- NULL
+          parsed_response <- NULL
+          question_errors <- list()
           actual_model <- NA_character_
           response_id <- NA_character_
           request_id <- NA_character_
@@ -340,21 +381,29 @@ jev_execute_map <- function(
                 outcome <- "parse_error"
               } else {
                 parsed <- tryCatch(
-                  jev_parse_response(body, provider, questions),
+                  jev_parse_response_partial(body, provider, questions),
                   error = identity
                 )
                 if (inherits(parsed, "condition")) {
+                  if (!inherits(parsed, "jev_response_error")) {
+                    stop(parsed)
+                  }
                   error <- parsed
                   outcome <- "response_error"
                 } else {
-                  parsed$metadata <- utils::modifyList(
-                    parsed$metadata,
+                  parsed_response <- parsed$response
+                  parsed_response$metadata <- utils::modifyList(
+                    parsed_response$metadata,
                     http_metadata
                   )
-                  actual_model <- parsed$model
+                  question_errors <- parsed$question_errors
+                  actual_model <- parsed_response$model
                   response_id <- if (is.null(body$id)) NA_character_ else body$id
-                  usage <- utils::modifyList(parsed$usage, parsed$metadata)
-                  outcome <- "success"
+                  usage <- utils::modifyList(
+                    parsed_response$usage,
+                    parsed_response$metadata
+                  )
+                  outcome <- parsed$status
                 }
               }
             } else {
@@ -379,7 +428,6 @@ jev_execute_map <- function(
             }
           }
 
-          finished_at <- jev_executor_timestamp()
           row <- jev_map_request_row(
             item = item,
             request_ref = request_ref,
@@ -388,9 +436,12 @@ jev_execute_map <- function(
             actual_model = actual_model,
             response_id = response_id,
             request_id = request_id,
-            started_at = started_at,
-            finished_at = finished_at,
-            duration_seconds = max(0, now() - started_clock),
+            started_at = NA_character_,
+            finished_at = NA_character_,
+            duration_seconds = jev_http_duration(
+              response,
+              timing = response_timing
+            ),
             usage = usage
           )
           item$attempts_log <- rbind(item$attempts_log, row)
@@ -401,31 +452,45 @@ jev_execute_map <- function(
           } else {
             jev_is_retryable_condition(error)
           }
-          global_stop <- !is.na(status) && status %in% c(401L, 402L, 403L, 404L)
-          remaining <- retry_budget - (now() - item$started_at)
-          can_retry <- retryable && item$attempts <= max_retries && remaining > 0
-
-          if (outcome == "success") {
-            items[[index]] <- jev_map_terminal(item, "success", response = parsed)
-            terminal_indices <- c(terminal_indices, index)
-            wave_outcomes <- c(wave_outcomes, "success")
-          } else if (can_retry && !global_stop) {
-            delay <- jev_retry_delay(
+          retry_delay <- if (retryable) {
+            jev_retry_delay(
               item$attempts,
-              response = if (inherits(response, "httr2_response")) response else NULL,
+              response = if (inherits(response, "httr2_response")) {
+                response
+              } else {
+                NULL
+              },
               jitter = 0.1,
               random = random
             )
-            if (delay >= remaining) {
+          } else {
+            NA_real_
+          }
+          if (!is.na(status) && status %in% c(429L, 529L)) {
+            cooldown_until <- max(cooldown_until, now() + retry_delay)
+          }
+
+          global_stop <- !is.na(status) && jev_http_global_stop(status, body)
+          remaining <- retry_budget - (now() - item$started_at)
+          can_retry <- retryable && item$attempts <= max_retries && remaining > 0
+
+          if (outcome %in% c("success", "partial")) {
+            items[[index]] <- jev_map_terminal(
+              item,
+              outcome,
+              response = parsed_response,
+              question_errors = question_errors
+            )
+            terminal_indices <- c(terminal_indices, index)
+            wave_outcomes <- c(wave_outcomes, outcome)
+          } else if (can_retry && !global_stop) {
+            if (retry_delay >= remaining) {
               items[[index]] <- jev_map_terminal(item, "error", error)
               terminal_indices <- c(terminal_indices, index)
               wave_outcomes <- c(wave_outcomes, "transient_error")
             } else {
               item$status <- "pending"
-              item$next_eligible_at <- now() + delay
-              if (!is.na(status) && status %in% c(429L, 529L)) {
-                cooldown_until <- max(cooldown_until, item$next_eligible_at)
-              }
+              item$next_eligible_at <- now() + retry_delay
               items[[index]] <- item
               wave_outcomes <- c(wave_outcomes, "retry")
             }
@@ -478,19 +543,31 @@ jev_execute_map <- function(
 
   pending <- which(vapply(items, function(item) item$status == "pending", logical(1)))
   if (length(pending) > 0L) {
-    pending_status <- if (identical(run_status, "cancelled")) {
-      "cancelled"
-    } else {
-      "not_started"
-    }
     for (index in pending) {
-      items[[index]] <- jev_map_terminal(
-        items[[index]],
-        pending_status,
+      attempted <- items[[index]]$attempts > 0L
+      pending_status <- if (attempted) {
+        if (identical(run_status, "cancelled")) "cancelled" else "error"
+      } else if (identical(run_status, "cancelled")) {
+        "cancelled"
+      } else {
+        "not_started"
+      }
+      pending_error <- if (attempted) {
+        jev_map_condition(
+          "Execution stopped after this state had already been attempted.",
+          "jev_transport_error",
+          list(retryable = TRUE)
+        )
+      } else {
         jev_map_condition(
           "Execution stopped before this state was admitted.",
           "jev_execution_error"
         )
+      }
+      items[[index]] <- jev_map_terminal(
+        items[[index]],
+        pending_status,
+        pending_error
       )
     }
   }

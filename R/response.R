@@ -209,33 +209,7 @@ jev_parse_answer <- function(answer, question_id, question) {
   answer
 }
 
-jev_parse_response <- function(body, provider, questions) {
-  if (!is.list(body)) {
-    jev_abort(
-      paste0(provider, " returned a JSON value instead of an object."),
-      class = "jev_response_error"
-    )
-  }
-
-  model <- body$model
-  answers <- body$answers
-  usage <- body$usage
-
-  if (!is.character(model) || length(model) != 1L || is.na(model) ||
-    !nzchar(model)) {
-    jev_abort(
-      "Response is missing a non-empty model field.",
-      class = "jev_response_error"
-    )
-  }
-
-  if (!is.list(answers) || is.null(names(answers))) {
-    jev_abort(
-      "Response is missing its named answers object.",
-      class = "jev_response_error"
-    )
-  }
-
+jev_response_question_definitions <- function(questions) {
   if (!is.character(questions) && !is.list(questions)) {
     jev_abort(
       "questions must be a named vector of types or a named list of questions.",
@@ -289,23 +263,67 @@ jev_parse_response <- function(body, provider, questions) {
     )
   }
 
-  missing_ids <- setdiff(question_ids, names(answers))
-  if (length(missing_ids) > 0L) {
+  list(ids = question_ids, definitions = question_definitions)
+}
+
+jev_validate_response_envelope <- function(
+  body,
+  provider,
+  questions,
+  allow_missing = FALSE
+) {
+  if (!is.list(body)) {
+    jev_abort(
+      paste0(provider, " returned a JSON value instead of an object."),
+      class = "jev_response_error"
+    )
+  }
+
+  model <- body$model
+  answers <- body$answers
+  usage <- body$usage
+  question_info <- jev_response_question_definitions(questions)
+
+  if (!is.character(model) || length(model) != 1L || is.na(model) ||
+    !nzchar(model)) {
+    jev_abort(
+      "Response is missing a non-empty model field.",
+      class = "jev_response_error"
+    )
+  }
+
+  if (!is.list(answers) || is.null(names(answers))) {
+    jev_abort(
+      "Response is missing its named answers object.",
+      class = "jev_response_error"
+    )
+  }
+
+  answer_names <- names(answers)
+  if (anyNA(answer_names) || any(!nzchar(answer_names)) ||
+    anyDuplicated(answer_names)) {
+    jev_abort(
+      "Response answers do not have valid unique question IDs.",
+      class = "jev_response_error"
+    )
+  }
+
+  extra_ids <- setdiff(answer_names, question_info$ids)
+  if (length(extra_ids) > 0L) {
+    jev_abort(
+      "Response answers do not match the requested question IDs.",
+      class = "jev_response_error"
+    )
+  }
+
+  missing_ids <- setdiff(question_info$ids, answer_names)
+  if (length(missing_ids) > 0L && !allow_missing) {
     jev_abort(
       paste0(
         "Response is missing answer(s) for question ID(s): ",
         paste(missing_ids, collapse = ", "),
         "."
       ),
-      class = "jev_response_error"
-    )
-  }
-
-  extra_ids <- setdiff(names(answers), question_ids)
-  if (length(extra_ids) > 0L || anyNA(names(answers)) ||
-    any(!nzchar(names(answers))) || anyDuplicated(names(answers))) {
-    jev_abort(
-      "Response answers do not match the requested question IDs.",
       class = "jev_response_error"
     )
   }
@@ -330,12 +348,6 @@ jev_parse_response <- function(body, provider, questions) {
     }
   }
 
-  parsed_answers <- lapply(
-    question_ids,
-    function(id) jev_parse_answer(answers[[id]], id, question_definitions[[id]])
-  )
-  names(parsed_answers) <- question_ids
-
   metadata <- if (is.null(body$metadata)) {
     list()
   } else if (is.list(body$metadata)) {
@@ -347,15 +359,106 @@ jev_parse_response <- function(body, provider, questions) {
   metadata$id <- if (is.null(body$id)) NULL else body$id
   metadata$upstream_provider <- if (is.null(body$provider)) NULL else body$provider
 
+  list(
+    model = model,
+    answers = answers,
+    usage = usage,
+    metadata = metadata,
+    raw = body,
+    ids = question_info$ids,
+    definitions = question_info$definitions
+  )
+}
+
+jev_parse_response_answers <- function(envelope, allow_invalid = FALSE) {
+  parsed_answers <- list()
+  question_errors <- list()
+
+  for (index in seq_along(envelope$ids)) {
+    id <- envelope$ids[[index]]
+    error <- NULL
+    answer <- NULL
+
+    if (!id %in% names(envelope$answers)) {
+      error <- tryCatch(
+        jev_abort(
+          paste0("Response is missing answer for question ID ", id, "."),
+          class = "jev_response_error"
+        ),
+        error = identity
+      )
+    } else {
+      answer <- tryCatch(
+        jev_parse_answer(
+          envelope$answers[[id]],
+          id,
+          envelope$definitions[[index]]
+        ),
+        error = identity
+      )
+      if (inherits(answer, "condition")) {
+        if (!inherits(answer, "jev_response_error")) {
+          stop(answer)
+        }
+        error <- answer
+        answer <- NULL
+      }
+    }
+
+    if (!is.null(error)) {
+      if (!allow_invalid) {
+        stop(error)
+      }
+      question_errors[[id]] <- jev_error_record(error)
+    } else {
+      parsed_answers[[id]] <- answer
+    }
+  }
+
+  list(answers = parsed_answers, question_errors = question_errors)
+}
+
+jev_new_response <- function(envelope, answers) {
   structure(
     list(
-      model = model,
-      answers = parsed_answers,
-      usage = usage,
-      metadata = metadata,
-      raw = body
+      model = envelope$model,
+      answers = answers,
+      usage = envelope$usage,
+      metadata = envelope$metadata,
+      raw = envelope$raw
     ),
     class = "jev_response"
+  )
+}
+
+jev_parse_response <- function(body, provider, questions) {
+  envelope <- jev_validate_response_envelope(
+    body,
+    provider,
+    questions,
+    allow_missing = FALSE
+  )
+  parsed <- jev_parse_response_answers(envelope, allow_invalid = FALSE)
+  jev_new_response(envelope, parsed$answers)
+}
+
+jev_parse_response_partial <- function(body, provider, questions) {
+  envelope <- jev_validate_response_envelope(
+    body,
+    provider,
+    questions,
+    allow_missing = TRUE
+  )
+  parsed <- jev_parse_response_answers(envelope, allow_invalid = TRUE)
+
+  list(
+    response = jev_new_response(envelope, parsed$answers),
+    question_errors = parsed$question_errors,
+    status = if (length(parsed$question_errors) == 0L) {
+      "success"
+    } else {
+      "partial"
+    }
   )
 }
 

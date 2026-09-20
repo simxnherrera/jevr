@@ -58,6 +58,75 @@ test_that("response parsing keeps all typed answer fields", {
   expect_identical(result$raw, raw)
 })
 
+test_that("partial parsing keeps valid answers and records invalid questions", {
+  questions <- list(
+    valid = jev_noul("Is the claim supported?"),
+    invalid = jev_noul("Is the claim current?")
+  )
+  raw <- list(
+    id = "decision-partial",
+    model = "jev-1.13.0",
+    answers = list(
+      valid = list(type = "noul", noul = 0.8),
+      invalid = list(type = "noul", noul = 1.2)
+    ),
+    usage = list(input_tokens = 10, output_tokens = 4)
+  )
+
+  result <- jevr:::jev_parse_response_partial(raw, "typesafe", questions)
+
+  expect_identical(result$status, "partial")
+  expect_identical(names(result$response$answers), "valid")
+  expect_equal(result$response$answers$valid$noul, 0.8)
+  expect_identical(result$response$raw, raw)
+  expect_identical(result$response$metadata$provider, "typesafe")
+  expect_identical(names(result$question_errors), "invalid")
+  expect_identical(
+    result$question_errors$invalid$class,
+    "jev_response_error"
+  )
+  expect_match(result$question_errors$invalid$message, "invalid noul")
+})
+
+test_that("partial parsing can retain two question errors", {
+  questions <- list(
+    choice = jev_choice("Which option?", c(first = "First", second = "Second")),
+    noul = jev_noul("Is it true?")
+  )
+  raw <- list(
+    model = "jev-1.13.0",
+    answers = list(
+      choice = list(
+        type = "choice",
+        choice = "unknown",
+        probabilities = list(first = 0.5, second = 0.5),
+        confidence = 0.5
+      ),
+      noul = list(type = "noul", noul = -0.1)
+    ),
+    usage = list()
+  )
+
+  result <- jevr:::jev_parse_response_partial(raw, "typesafe", questions)
+
+  expect_identical(result$status, "partial")
+  expect_length(result$response$answers, 0L)
+  expect_identical(names(result$question_errors), c("choice", "noul"))
+})
+
+test_that("an invalid response envelope still fails the state", {
+  questions <- list(urgent = jev_noul("Is it urgent?"))
+  invalid_envelope <- list(
+    model = "jev-1.13.0",
+    answers = "not an object",
+    usage = list()
+  )
+
+  expect_jev_response_error(
+    jevr:::jev_parse_response_partial(invalid_envelope, "typesafe", questions)
+  )
+})
+
 test_that("incomplete responses fail with the missing field", {
   incomplete <- list(
     model = "jev-latest",

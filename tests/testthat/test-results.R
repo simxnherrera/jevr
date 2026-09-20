@@ -37,6 +37,95 @@ test_that("result sets expose long rows and preserve request metadata", {
   expect_equal(summary(result["a"])$http_attempts, 1L)
 })
 
+test_that("subsetting retains every attempt for the selected logical item", {
+  withr::local_envvar(TYPESAFE_API_KEY = "fake-typesafe-key")
+  calls <- 0L
+  response_body <- paste0(
+    '{"model":"jev-1.13.0","answers":{"urgent":{"type":"noul",',
+    '"noul":0.8}},"usage":{"input_tokens":1,"output_tokens":2,',
+    '"cost":0.2}}'
+  )
+  mock <- function(req) {
+    calls <<- calls + 1L
+    if (calls == 1L) {
+      return(httr2::response(
+        status_code = 429,
+        headers = list("Retry-After" = "0")
+      ))
+    }
+    httr2::response(
+      status_code = 200,
+      headers = list("Content-Type" = "application/json"),
+      body = charToRaw(response_body)
+    )
+  }
+
+  result <- httr2::with_mocked_responses(
+    mock,
+    jev_map(
+      c(doc = "text"),
+      list(urgent = jev_noul("Is it urgent?")),
+      max_retries = 1,
+      progress = FALSE
+    )
+  )
+  subset <- result["doc"]
+  requests <- attr(subset, "requests")
+
+  expect_equal(nrow(requests), 2L)
+  expect_identical(requests$status, c(429L, 200L))
+  expect_equal(summary(subset)$retries, 1L)
+  expect_equal(summary(subset)$observed_input_tokens, 1)
+  expect_equal(summary(subset)$observed_output_tokens, 2)
+  expect_equal(summary(subset)$observed_cost, 0.2)
+  expect_equal(length(unique(requests$request_ref)), 2L)
+})
+
+test_that("combining result sets preserves each logical item's attempts", {
+  withr::local_envvar(TYPESAFE_API_KEY = "fake-typesafe-key")
+  run_retry <- function(id) {
+    calls <- 0L
+    response_body <- paste0(
+      '{"model":"jev-1.13.0","answers":{"urgent":{"type":"noul",',
+      '"noul":0.8}},"usage":{"input_tokens":1,"output_tokens":2}}'
+    )
+    mock <- function(req) {
+      calls <<- calls + 1L
+      if (calls == 1L) {
+        return(httr2::response(
+          status_code = 429,
+          headers = list("Retry-After" = "0")
+        ))
+      }
+      httr2::response(
+        status_code = 200,
+        headers = list("Content-Type" = "application/json"),
+        body = charToRaw(response_body)
+      )
+    }
+    states <- list("text")
+    names(states) <- id
+    httr2::with_mocked_responses(
+      mock,
+      jev_map(
+        states,
+        list(urgent = jev_noul("Is it urgent?")),
+        max_retries = 1L,
+        progress = FALSE
+      )
+    )
+  }
+
+  combined <- c(run_retry("first"), run_retry("second"))
+  expect_equal(nrow(attr(combined, "requests")), 4L)
+  expect_equal(summary(combined)$retries, 2L)
+  expect_identical(
+    attr(combined, "requests")$status,
+    c(429L, 200L, 429L, 200L)
+  )
+  expect_equal(nrow(attr(combined["first"], "requests")), 2L)
+})
+
 test_that("global HTTP stops keep unadmitted states in the result set", {
   withr::local_envvar(TYPESAFE_API_KEY = "fake-typesafe-key")
   calls <- 0L

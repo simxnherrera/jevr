@@ -23,31 +23,6 @@ jev_empty_attempt_ledger <- function() {
   )
 }
 
-jev_error_record <- function(error) {
-  if (is.null(error)) {
-    return(NULL)
-  }
-
-  if (is.list(error) && !inherits(error, "condition") &&
-    !is.null(error$class) && !is.null(error$message)) {
-    return(error)
-  }
-
-  details <- if (is.list(error)) {
-    error[names(error) %in% c(
-      "status", "provider", "attempts", "retryable", "argument", "retry_at"
-    )]
-  } else {
-    list()
-  }
-
-  list(
-    class = class(error)[[1L]],
-    message = conditionMessage(error),
-    details = details
-  )
-}
-
 jev_result <- function(
   state_id,
   input_index,
@@ -108,6 +83,24 @@ jev_result_set <- function(
 
 jev_result_set_items <- function(x) {
   unclass(x)
+}
+
+jev_result_item_key <- function(item) {
+  paste(
+    item$provenance$execution_id,
+    item$state_id,
+    item$input_index,
+    sep = "\r"
+  )
+}
+
+jev_request_item_key <- function(requests) {
+  paste(
+    requests$execution_id,
+    requests$state_id,
+    requests$input_index,
+    sep = "\r"
+  )
 }
 
 jev_result_set_summary <- function(items, requests, summary) {
@@ -183,13 +176,13 @@ summary.jev_result_set <- function(object, ...) {
     jev_result_set_items(x)[i]
   }
 
-  refs <- unique(unlist(lapply(items, function(item) item$request_ref)))
   requests <- attr(x, "requests")
   if (is.null(requests)) {
     requests <- jev_empty_attempt_ledger()
   }
-  if (nrow(requests) > 0L && length(refs) > 0L) {
-    requests <- requests[requests$request_ref %in% refs, , drop = FALSE]
+  if (nrow(requests) > 0L && length(items) > 0L) {
+    keys <- unique(vapply(items, jev_result_item_key, character(1)))
+    requests <- requests[jev_request_item_key(requests) %in% keys, , drop = FALSE]
   } else {
     requests <- jev_empty_attempt_ledger()
   }
@@ -305,6 +298,11 @@ jev_result_question_definitions <- function(x) {
 #' @return A data frame with one row per state-question pair. `value`,
 #'   `probabilities`, and `legend` remain list-columns; provenance and error
 #'   fields are returned as scalar columns.
+#' @details
+#' Partial states produce one row for every requested question. Valid answers
+#' have `status = "success"`; invalid or missing individual answers have
+#' `status = "error"` and their question-level error in `error_class` and
+#' `error_message`.
 #' @export
 #' @examplesIf identical(Sys.getenv("JEVR_RUN_EXAMPLES"), "true") && nzchar(Sys.getenv("TYPESAFE_API_KEY"))
 #' states <- list(
@@ -335,14 +333,20 @@ as.data.frame.jev_result_set <- function(x, row.names = NULL, optional = FALSE, 
   request_ref <- character(n)
   spec_hash <- character(n)
   state_hash <- character(n)
-  error_class <- character(n)
-  error_message <- character(n)
+  error_class <- rep(NA_character_, n)
+  error_message <- rep(NA_character_, n)
 
   position <- 0L
   for (item in items) {
     for (id in question_ids) {
       position <- position + 1L
       answer <- if (!is.null(item$response)) item$response$answers[[id]] else NULL
+      question_error <- if (is.null(item$question_errors)) {
+        NULL
+      } else {
+        item$question_errors[[id]]
+      }
+      row_error <- if (!is.null(question_error)) question_error else item$error
       question <- questions[[id]]
       state_id[[position]] <- item$state_id
       input_index[[position]] <- item$input_index
@@ -358,7 +362,13 @@ as.data.frame.jev_result_set <- function(x, row.names = NULL, optional = FALSE, 
         answer$confidence
       }
       legend[position] <- list(if (is.null(answer)) NULL else answer$legend)
-      status[[position]] <- if (is.null(answer)) item$status else "success"
+      status[[position]] <- if (!is.null(answer)) {
+        "success"
+      } else if (!is.null(question_error)) {
+        "error"
+      } else {
+        item$status
+      }
       execution_id[[position]] <- if (is.null(item$provenance$execution_id)) {
         NA_character_
       } else {
@@ -379,8 +389,16 @@ as.data.frame.jev_result_set <- function(x, row.names = NULL, optional = FALSE, 
       } else {
         item$provenance$state_hash
       }
-      error_class[[position]] <- if (is.null(item$error)) NA_character_ else item$error$class
-      error_message[[position]] <- if (is.null(item$error)) NA_character_ else item$error$message
+      error_class[[position]] <- if (is.null(row_error)) {
+        NA_character_
+      } else {
+        row_error$class
+      }
+      error_message[[position]] <- if (is.null(row_error)) {
+        NA_character_
+      } else {
+        row_error$message
+      }
     }
   }
 

@@ -2,7 +2,7 @@
 % Please edit documentation in R/map.R
 \name{jev_map}
 \alias{jev_map}
-\title{Evaluate the same questions for multiple explicit states}
+\title{Evaluate shared questions for multiple independent states}
 \usage{
 jev_map(
   states,
@@ -46,7 +46,21 @@ supplies durable state IDs; unnamed inputs receive positional IDs.}
 A \code{jev_result_set} preserving input order and IDs.
 }
 \description{
-Evaluate the same questions for multiple explicit states
+Evaluate shared questions for multiple independent states
+}
+\details{
+\code{jev_map()} represents many independent evaluations. It does not combine
+multiple states into one model request. Requests are admitted in bounded
+waves, while \code{rate_limit} controls preventive admission separately from
+\code{concurrency}.
+
+For a valid response envelope with invalid individual answers, the result
+has \code{status = "partial"}, keeps only validated answers in \code{response$answers},
+and records per-question errors in \code{question_errors}. The request ledger's
+\code{duration_seconds} is the per-response HTTP total reported by
+\code{httr2::resp_timing()}; it is \code{NA} when that timing is unavailable. The
+ledger timestamps are \code{NA} because \code{req_perform_parallel()} returns after
+the HTTP work and does not expose reliable per-request wall-clock stamps.
 }
 \examples{
 \dontshow{if (identical(Sys.getenv("JEVR_RUN_EXAMPLES"), "true") && nzchar(Sys.getenv("TYPESAFE_API_KEY"))) withAutoprint(\{ # examplesIf}

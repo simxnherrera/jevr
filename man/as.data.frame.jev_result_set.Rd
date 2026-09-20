@@ -23,6 +23,12 @@ fields are returned as scalar columns.
 \description{
 Convert a result set to one row per state and requested question
 }
+\details{
+Partial states produce one row for every requested question. Valid answers
+have \code{status = "success"}; invalid or missing individual answers have
+\code{status = "error"} and their question-level error in \code{error_class} and
+\code{error_message}.
+}
 \examples{
 \dontshow{if (identical(Sys.getenv("JEVR_RUN_EXAMPLES"), "true") && nzchar(Sys.getenv("TYPESAFE_API_KEY"))) withAutoprint(\{ # examplesIf}
 states <- list(

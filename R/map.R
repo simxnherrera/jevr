@@ -178,7 +178,9 @@ jev_map_summary <- function(items, requests, started_at, finished_at) {
     )),
     partial = sum(statuses == "partial"),
     not_started = sum(statuses == "not_started"),
-    http_requests = length(unique(requests$execution_id)),
+    http_requests = nrow(unique(requests[c(
+      "execution_id", "state_id", "input_index"
+    )])),
     http_attempts = nrow(requests),
     retries = sum(attempts > 1L),
     status_429 = if (nrow(requests) == 0L) 0L else sum(requests$status == 429L, na.rm = TRUE),
@@ -210,7 +212,7 @@ jev_map_summary <- function(items, requests, started_at, finished_at) {
   )
 }
 
-#' Evaluate the same questions for multiple explicit states
+#' Evaluate shared questions for multiple independent states
 #'
 #' @param states A character vector or list of complete states. A named input
 #'   supplies durable state IDs; unnamed inputs receive positional IDs.
@@ -225,6 +227,19 @@ jev_map_summary <- function(items, requests, started_at, finished_at) {
 #' @param on_result Optional caller-owned callback for each terminal result.
 #' @param progress Display the httr2 progress indicator.
 #' @return A `jev_result_set` preserving input order and IDs.
+#' @details
+#' `jev_map()` represents many independent evaluations. It does not combine
+#' multiple states into one model request. Requests are admitted in bounded
+#' waves, while `rate_limit` controls preventive admission separately from
+#' `concurrency`.
+#'
+#' For a valid response envelope with invalid individual answers, the result
+#' has `status = "partial"`, keeps only validated answers in `response$answers`,
+#' and records per-question errors in `question_errors`. The request ledger's
+#' `duration_seconds` is the per-response HTTP total reported by
+#' `httr2::resp_timing()`; it is `NA` when that timing is unavailable. The
+#' ledger timestamps are `NA` because `req_perform_parallel()` returns after
+#' the HTTP work and does not expose reliable per-request wall-clock stamps.
 #' @export
 #' @examplesIf identical(Sys.getenv("JEVR_RUN_EXAMPLES"), "true") && nzchar(Sys.getenv("TYPESAFE_API_KEY"))
 #' states <- list(
