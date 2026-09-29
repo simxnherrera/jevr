@@ -38,10 +38,12 @@ jev_map_condition_details <- function(error) {
     return(list())
   }
 
-  error[names(error) %in% c(
+  details <- error[names(error) %in% c(
     "status", "provider", "attempts", "retryable", "retry_at", "scope",
-    "field_path", "request_id"
+    "field_path", "request_id", "structured_result"
   )]
+  if (inherits(error$cause, "condition")) details$cause <- jev_error_record(error$cause)
+  details
 }
 
 jev_map_as_error <- function(error) {

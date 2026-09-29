@@ -15,7 +15,8 @@ jev_map(
   rate_limit = 5,
   retry_budget = 120,
   on_result = NULL,
-  progress = interactive()
+  progress = interactive(),
+  backend = NULL
 )
 }
 \arguments{
@@ -40,7 +41,12 @@ supplies durable state IDs; unnamed inputs receive positional IDs.}
 
 \item{on_result}{Optional caller-owned callback for each terminal result.}
 
-\item{progress}{Display the httr2 progress indicator.}
+\item{progress}{Display execution progress.}
+
+\item{backend}{Optional \code{jev_llm()} backend. This route is sequential:
+\code{concurrency} defaults to one and larger values are rejected. Explicit
+\code{provider}, \code{model}, \code{timeout}, \code{retry_budget}, and positive \code{max_retries}
+are rejected. \code{rate_limit} controls admission between evaluations.}
 }
 \value{
 A \code{jev_result_set} preserving input order and IDs.
@@ -61,6 +67,14 @@ and records per-question errors in \code{question_errors}. The request ledger's
 \code{httr2::resp_timing()}; it is \code{NA} when that timing is unavailable. The
 ledger timestamps are \code{NA} because \code{req_perform_parallel()} returns after
 the HTTP work and does not expose reliable per-request wall-clock stamps.
+
+With an ellmer backend, partial parsing, result classes and callbacks follow
+the same contract. The ledger records one jevr invocation per admitted
+evaluation, with elapsed duration and wall-clock timestamps; HTTP status
+and internal transport attempts are unknown. \code{summary()$llm_invocations}
+counts these calls separately from native HTTP attempts. Interrupts retain
+completed results and cancel remaining evaluations. Callback failures stop
+admission and leave remaining states \code{not_started}.
 }
 \examples{
 \dontshow{if (identical(Sys.getenv("JEVR_RUN_EXAMPLES"), "true") && nzchar(Sys.getenv("TYPESAFE_API_KEY"))) withAutoprint(\{ # examplesIf}

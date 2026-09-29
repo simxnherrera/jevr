@@ -10,7 +10,8 @@ jev_ask(
   provider = c("typesafe", "openrouter"),
   model = NULL,
   timeout = 30,
-  max_retries = 3
+  max_retries = 3,
+  backend = NULL
 )
 }
 \arguments{
@@ -32,10 +33,16 @@ TypeSafe and ~typesafe/jev-latest for OpenRouter.}
 
 \item{max_retries}{Number of retries after the first failed or transient
 response. Retries use exponential backoff and honor Retry-After.}
+
+\item{backend}{Optional \code{jev_llm()} backend. Cannot be combined with explicit
+\code{provider}, \code{model}, \code{timeout}, or positive \code{max_retries}. Timeout and
+retries belong to the chat transport. Omitted native defaults do not apply.}
 }
 \value{
 An object of class jev_response with model, typed answers, usage,
-provider metadata, and the unmodified response in raw.
+provider metadata, and the unmodified response in raw. With an ellmer
+backend, raw is the received structured object; answers are the validated
+jevr representation with locally calculated decisions.
 }
 \description{
 \code{jev_ask()} represents one evaluation: it sends one state and a named set

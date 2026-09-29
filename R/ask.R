@@ -87,9 +87,14 @@ jev_validate_request_options <- function(timeout, max_retries) {
 #' @param timeout Maximum time in seconds for each HTTP attempt.
 #' @param max_retries Number of retries after the first failed or transient
 #'   response. Retries use exponential backoff and honor Retry-After.
+#' @param backend Optional `jev_llm()` backend. Cannot be combined with explicit
+#'   `provider`, `model`, `timeout`, or positive `max_retries`. Timeout and
+#'   retries belong to the chat transport. Omitted native defaults do not apply.
 #'
 #' @return An object of class jev_response with model, typed answers, usage,
-#'   provider metadata, and the unmodified response in raw.
+#'   provider metadata, and the unmodified response in raw. With an ellmer
+#'   backend, raw is the received structured object; answers are the validated
+#'   jevr representation with locally calculated decisions.
 #' @details `jev_ask()` keeps strict response parsing for compatibility: an
 #'   invalid envelope or answer raises an error for the evaluation. Use
 #'   `jev_map()` when collection-level partial results are needed.
@@ -120,8 +125,23 @@ jev_ask <- function(
   provider = c("typesafe", "openrouter"),
   model = NULL,
   timeout = 30,
-  max_retries = 3
+  max_retries = 3,
+  backend = NULL
 ) {
+  definition <- questions
+  if (!is.null(backend)) {
+    jev_validate_llm_options(
+      backend, !missing(provider), !missing(model),
+      !missing(timeout), if (missing(max_retries)) 0 else max_retries
+    )
+    state <- jev_validate_state(state)
+    questions <- jev_validate_questions(jev_questions_value(questions))
+    evaluation <- jev_llm_evaluate(state, questions, backend, definition)
+    result <- jev_llm_parse(evaluation, questions, backend)$response
+    result$metadata$spec_hash <- jev_spec_hash(definition)
+    result$metadata$state_hash <- jev_state_hash(state)
+    return(result)
+  }
   provider <- match.arg(provider)
   state <- jev_validate_state(state)
   questions <- jev_questions_value(questions)

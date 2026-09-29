@@ -25,7 +25,9 @@ jev_probability_map <- function(value, argument) {
   value
 }
 
-jev_validate_probability_map <- function(value, argument, expected_names = NULL) {
+jev_validate_probability_map <- function(
+  value, argument, expected_names = NULL, probability_tolerance = 1e-6
+) {
   value <- jev_probability_map(value, argument)
 
   if (!is.null(expected_names) && !setequal(names(value), expected_names)) {
@@ -35,7 +37,6 @@ jev_validate_probability_map <- function(value, argument, expected_names = NULL)
     )
   }
 
-  probability_tolerance <- 1e-6
   if (abs(sum(value) - 1) > probability_tolerance) {
     jev_abort(
       paste0("Response field ", argument, " probabilities must sum to 1."),
@@ -109,7 +110,10 @@ jev_required_response_field <- function(answer, field, question_id) {
   answer[[field]]
 }
 
-jev_parse_answer <- function(answer, question_id, question) {
+jev_parse_answer <- function(
+  answer, question_id, question, allow_missing_confidence = FALSE,
+  probability_tolerance = 1e-6
+) {
   expected_type <- question$type
 
   if (!is.list(answer) || !identical(answer$type, expected_type)) {
@@ -147,13 +151,14 @@ jev_parse_answer <- function(answer, question_id, question) {
     answer$probabilities <- jev_validate_probability_map(
       probabilities,
       paste0(question_id, "$probabilities"),
-      expected_names
+      expected_names,
+      probability_tolerance
     )
-    confidence <- jev_required_response_field(answer, "confidence", question_id)
-    answer$confidence <- jev_confidence(
-      confidence,
-      paste0(question_id, "$confidence")
-    )
+    if (!(allow_missing_confidence && "confidence" %in% names(answer) &&
+      is.null(answer$confidence))) {
+      confidence <- jev_required_response_field(answer, "confidence", question_id)
+      answer$confidence <- jev_confidence(confidence, paste0(question_id, "$confidence"))
+    }
     class(answer) <- c("jev_choice_answer", "jev_answer", "list")
     return(answer)
   }
@@ -185,13 +190,14 @@ jev_parse_answer <- function(answer, question_id, question) {
     answer$probabilities <- jev_validate_probability_map(
       probabilities,
       paste0(question_id, "$probabilities"),
-      expected_names
+      expected_names,
+      probability_tolerance
     )
-    confidence <- jev_required_response_field(answer, "confidence", question_id)
-    answer$confidence <- jev_confidence(
-      confidence,
-      paste0(question_id, "$confidence")
-    )
+    if (!(allow_missing_confidence && "confidence" %in% names(answer) &&
+      is.null(answer$confidence))) {
+      confidence <- jev_required_response_field(answer, "confidence", question_id)
+      answer$confidence <- jev_confidence(confidence, paste0(question_id, "$confidence"))
+    }
     class(answer) <- c("jev_score_answer", "jev_answer", "list")
     return(answer)
   }

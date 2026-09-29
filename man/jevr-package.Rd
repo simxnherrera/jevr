@@ -6,7 +6,7 @@
 \alias{jevr-package}
 \title{jevr: A Native R Client for 'JEV' System One Decisions}
 \description{
-Define typed questions and submit structured decisions to 'JEV', the System One model from 'TypeSafe'. Provide a provider-independent interface for shared state, Choice, Score, and Noul questions, with probabilities, confidence, usage, and raw response metadata preserved. Support the direct 'TypeSafe' application programming interface (API) and the Decisions endpoint of 'OpenRouter' with bounded retries and informative errors.
+Define typed questions and submit structured decisions to 'JEV', the System One model from 'TypeSafe'. Provide a provider-independent interface for shared state, Choice, Score, and Noul questions, with probabilities, confidence, usage, and raw response metadata preserved. Support the direct 'TypeSafe' application programming interface (API) and the Decisions endpoint of 'OpenRouter' with bounded retries and informative errors. Optionally evaluate the same typed questions through an 'ellmer' chat with explicit provenance for self-reported probabilities.
 }
 \seealso{
 Useful links:
