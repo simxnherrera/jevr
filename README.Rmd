@@ -184,6 +184,105 @@ It uses `~typesafe/jev-latest` by default and authenticates with
 `OPENROUTER_API_KEY`. Structured JSON instructions and criteria are preserved
 when the provider contract accepts them.
 
+### ellmer and ellmercodex (optional)
+
+The same questions and `jev_spec()` objects can be evaluated with an ellmer
+`Chat`. Supply a factory that creates a new chat for each evaluation and an
+explicit, data-only description of its semantic configuration:
+
+```{r, eval=FALSE}
+backend <- jev_llm(
+  chat = function() {
+    ellmercodex::chat_codex(model = "gpt-6-luna", effort = "medium")
+  },
+  model = "gpt-6-luna",
+  inference_options = list(reasoning_effort = "medium")
+)
+
+result <- jev_ask(
+  state = "Help! My payouts have been failing for three days.",
+  questions = questions,
+  backend = backend
+)
+
+results <- jev_map(
+  states = c(first = "Payouts fail", second = "A refund is pending"),
+  questions = questions,
+  backend = backend,
+  concurrency = 1,
+  on_result = function(result) {
+    # Persist the terminal result in caller-owned storage.
+  }
+)
+```
+
+Creating `backend` does not create a chat or contact the service. ellmer and
+ellmercodex are optional packages; ellmercodex owns authentication and
+transport. Authenticate separately using its documented workflow. Without
+`backend`, TypeSafe and OpenRouter continue to use their native Decisions APIs.
+
+All questions in one evaluation share a single structured call, with their
+IDs, order, JSON instructions and criteria preserved. The prompt treats the
+state as source data and instructs the model to disregard instructions in that
+material. Each question must be answered independently. This prompt instruction
+is not a guarantee of resistance to adversarial source material.
+
+Choice and Score return distributions; Noul returns probability of true.
+jevr selects the Choice option with highest probability, breaking ties by the
+original criteria order. Score is the weighted mean over levels `0` through
+`k - 1`: `sum(level * probability) / sum(probability)`. Distributions must contain
+exactly the requested keys, finite numbers in `[0, 1]`, and sum to one within
+`probability_tolerance` (default `1e-6`, maximum `1e-3`). Accepted rounded
+probabilities are preserved; invalid distributions are rejected without
+renormalization. The Score denominator accounts only for accepted rounding.
+
+These are self-reported LLM probabilities. Each answer and response metadata
+records `probability_source = "llm_self_report"` and
+`confidence_status = "absent"`; Choice and Score have explicit
+`confidence = NULL`. Native responses still require confidence. `result$raw`
+is the structured object returned by ellmer; `result$answers` contains the
+validated jevr representation, including locally calculated decisions.
+
+Metadata records the upstream provider name from public
+`Chat$get_provider()@name`, requested model, model from public
+`Chat$get_model()` when available, adapter version, inference options and
+`configuration`. The model getter describes ellmer's model; it does not certify
+an upstream resolved model ID. Public `Chat$get_tokens()` supplies available
+usage and cost; unavailable usage is `NA`, and unavailable cost is omitted.
+For ellmercodex, `metadata$upstream_provider` is `"codex"`. Only the provider
+name is retained; its object and credentials are not stored. Unavailable names
+remain `NULL`. The name participates in the execution identity after chat
+construction. States that never construct a chat (invalid, not admitted, or
+factory failures) have `execution_id = NA`. No missing metadata is inferred
+from the requested configuration.
+
+The declared settings are not applied automatically to the factory. Describe
+additional semantic settings (for example, `system_prompt` or `api_args`) in
+`configuration`, and keep the description consistent with the factory.
+Changing these settings changes the execution identity. Factories, Chat objects,
+environments and credentials are never included in provenance or hashes.
+
+This route supports only `concurrency = 1`. Explicit `provider`, `model`,
+`timeout`, `retry_budget` (map only), or positive `max_retries` conflict with the
+backend and are rejected. Omitted native defaults do not control ellmer.
+Timeouts and retries belong to the transport: `chat_codex()` currently provides
+no public per-evaluation timeout override, so jevr cannot promise one.
+`rate_limit` spaces sequential admissions; ellmer parallel/batch helpers are
+not used. The existing callbacks, partial results and result-set operations
+remain available.
+
+The ledger records one jevr invocation per admitted evaluation with elapsed
+duration and timestamps. HTTP status and the transport's internal attempt count
+are unknown. `summary(results)$llm_invocations` counts these invocations;
+`http_attempts` counts only observed native HTTP attempts. Transport failures
+retain the original condition as the cause in `jev_ask()` and a data-only cause
+record in map errors.
+
+Tests run without network by default. The optional real integration test
+requires `JEVR_RUN_ELLMERCODEX_INTEGRATION=true` and a separately authenticated
+ellmercodex session. Enabling it uses the subscription and sends one evaluation
+with Choice, Score and Noul. It does not perform authentication for you.
+
 ## Versioned specifications and multiple states
 
 Use `jev_spec()` when a definition must be identified and compared over time:
@@ -248,7 +347,7 @@ When the provider returns a valid response envelope but an individual answer
 cannot be validated, `jev_map()` returns `status = "partial"`, keeps the valid
 answers, and records the invalid questions in `question_errors`. The raw
 response remains available for audit. `attr(results, "requests")` contains one
-row per physical HTTP attempt; `duration_seconds` is the per-response HTTP
+row per physical native HTTP attempt; `duration_seconds` is the per-response HTTP
 timing reported by httr2 and can be `NA` when the backend does not provide a
 reliable value. Per-request ledger timestamps are `NA` because the public
 parallel API does not expose reliable start and finish timestamps after the
@@ -266,12 +365,12 @@ does not introduce a second transport backend in this release.
 
 `jev_ask()` returns an object of class `jev_response` with these main fields:
 
-- `model`: model used for the request.
+- `model`: reported model, or the requested model when ellmer metadata is unavailable.
 - `answers`: named answers corresponding to the supplied questions.
 - `usage`: input and output token counts returned by the provider.
 - `metadata`: provider and upstream request metadata.
 - `raw`: the unmodified provider response.
 
-Use `?jev_ask`, `?jev_map`, `?jev_spec`, `?jev_definition_manifest`,
+Use `?jev_ask`, `?jev_llm`, `?jev_map`, `?jev_spec`, `?jev_definition_manifest`,
 `?jev_spec_hash`, `?jev_state_hash`, `?jev_execution_id`, `?jev_choice`,
 `?jev_score`, and `?jev_noul` for the complete argument reference.
