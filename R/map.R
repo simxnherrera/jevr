@@ -104,7 +104,8 @@ jev_map_item <- function(
   provider,
   model,
   questions,
-  definition
+  definition,
+  backend = NULL
 ) {
   provenance <- list(
     spec_name = if (inherits(definition, "jev_spec")) definition$name else NULL,
@@ -116,6 +117,13 @@ jev_map_item <- function(
     provider = provider,
     requested_model = model
   )
+
+  if (!is.null(backend)) {
+    provenance <- c(provenance, jev_llm_description(backend)[-1L], list(
+      probability_source = "llm_self_report", confidence_status = "absent",
+      attempt_scope = "jevr_invocation"
+    ))
+  }
 
   item <- list(
     state = NULL,
@@ -144,12 +152,11 @@ jev_map_item <- function(
 
   item$state <- validated
   item$provenance$state_hash <- jev_state_hash(validated)
-  item$provenance$execution_id <- jev_execution_id(
-    state = validated,
-    definition = definition,
-    provider = provider,
-    model = model
-  )
+  item$provenance$execution_id <- if (is.null(backend)) {
+    jev_execution_id(validated, definition, provider, model)
+  } else {
+    NA_character_
+  }
   item
 }
 
@@ -170,6 +177,7 @@ jev_map_as_result <- function(item) {
 jev_map_summary <- function(items, requests, started_at, finished_at) {
   statuses <- vapply(items, function(item) item$status, character(1))
   attempts <- if (nrow(requests) == 0L) integer() else requests$attempt
+  http_requests <- requests[requests$provider != "ellmer", , drop = FALSE]
   list(
     states = length(items),
     successes = sum(statuses == "success"),
@@ -178,10 +186,11 @@ jev_map_summary <- function(items, requests, started_at, finished_at) {
     )),
     partial = sum(statuses == "partial"),
     not_started = sum(statuses == "not_started"),
-    http_requests = nrow(unique(requests[c(
+    http_requests = nrow(unique(http_requests[c(
       "execution_id", "state_id", "input_index"
     )])),
-    http_attempts = nrow(requests),
+    http_attempts = nrow(http_requests),
+    llm_invocations = sum(requests$provider == "ellmer"),
     retries = sum(attempts > 1L),
     status_429 = if (nrow(requests) == 0L) 0L else sum(requests$status == 429L, na.rm = TRUE),
     status_529 = if (nrow(requests) == 0L) 0L else sum(requests$status == 529L, na.rm = TRUE),
@@ -225,7 +234,11 @@ jev_map_summary <- function(items, requests, started_at, finished_at) {
 #' @param rate_limit Preventive requests-per-second throttle.
 #' @param retry_budget Maximum seconds for retries and waits for one state.
 #' @param on_result Optional caller-owned callback for each terminal result.
-#' @param progress Display the httr2 progress indicator.
+#' @param progress Display execution progress.
+#' @param backend Optional `jev_llm()` backend. This route is sequential:
+#'   `concurrency` defaults to one and larger values are rejected. Explicit
+#'   `provider`, `model`, `timeout`, `retry_budget`, and positive `max_retries`
+#'   are rejected. `rate_limit` controls admission between evaluations.
 #' @return A `jev_result_set` preserving input order and IDs.
 #' @details
 #' `jev_map()` represents many independent evaluations. It does not combine
@@ -240,6 +253,14 @@ jev_map_summary <- function(items, requests, started_at, finished_at) {
 #' `httr2::resp_timing()`; it is `NA` when that timing is unavailable. The
 #' ledger timestamps are `NA` because `req_perform_parallel()` returns after
 #' the HTTP work and does not expose reliable per-request wall-clock stamps.
+#'
+#' With an ellmer backend, partial parsing, result classes and callbacks follow
+#' the same contract. The ledger records one jevr invocation per admitted
+#' evaluation, with elapsed duration and wall-clock timestamps; HTTP status
+#' and internal transport attempts are unknown. `summary()$llm_invocations`
+#' counts these calls separately from native HTTP attempts. Interrupts retain
+#' completed results and cancel remaining evaluations. Callback failures stop
+#' admission and leave remaining states `not_started`.
 #' @export
 #' @examplesIf identical(Sys.getenv("JEVR_RUN_EXAMPLES"), "true") && nzchar(Sys.getenv("TYPESAFE_API_KEY"))
 #' states <- list(
@@ -267,9 +288,29 @@ jev_map <- function(
   rate_limit = 5,
   retry_budget = 120,
   on_result = NULL,
-  progress = interactive()
+  progress = interactive(),
+  backend = NULL
 ) {
-  provider <- match.arg(provider)
+  if (!is.null(backend)) {
+    jev_validate_llm_options(
+      backend, !missing(provider), !missing(model),
+      !missing(timeout), if (missing(max_retries)) 0 else max_retries
+    )
+    if (missing(concurrency)) concurrency <- 1L
+    if (length(concurrency) == 1L && is.numeric(concurrency) &&
+      is.finite(concurrency) && concurrency > 1) {
+      jev_abort("The ellmer backend supports only concurrency = 1.", class = "jev_input_error")
+    }
+    if (!missing(retry_budget)) {
+      jev_abort("The ellmer backend cannot apply retry_budget; retries belong to the transport.",
+        class = "jev_input_error"
+      )
+    }
+    provider <- "ellmer"
+    model <- backend$model
+  } else {
+    provider <- match.arg(provider)
+  }
   definition <- jev_map_definition(questions)
   questions <- jev_questions_value(definition)
   jev_validate_request_options(timeout, max_retries)
@@ -308,7 +349,8 @@ jev_map <- function(
       provider = provider,
       model = model,
       questions = questions,
-      definition = definition
+      definition = definition,
+      backend = backend
     )
   })
 
@@ -324,7 +366,7 @@ jev_map <- function(
   }
 
   valid_indices <- which(vapply(items, function(item) item$status == "pending", logical(1)))
-  if (length(valid_indices) > 0L) {
+  if (length(valid_indices) > 0L && is.null(backend)) {
     jev_api_key(provider)
   }
 
@@ -357,20 +399,27 @@ jev_map <- function(
   }
 
   execution <- if (is.null(callback_error) && length(valid_indices) > 0L) {
-    jev_execute_map(
-      items = items,
-      provider = provider,
-      questions = questions,
-      model = model,
-      concurrency = as.integer(concurrency),
-      timeout = timeout,
-      max_retries = as.integer(max_retries),
-      rate_limit = rate_limit,
-      retry_budget = retry_budget,
-      on_result = on_result,
-      progress = progress,
-      delivered = delivered
-    )
+    if (!is.null(backend)) {
+      jev_execute_llm_map(items, questions, backend, rate_limit,
+        on_result = on_result, progress = progress, delivered = delivered,
+        definition = definition
+      )
+    } else {
+      jev_execute_map(
+        items = items,
+        provider = provider,
+        questions = questions,
+        model = model,
+        concurrency = as.integer(concurrency),
+        timeout = timeout,
+        max_retries = as.integer(max_retries),
+        rate_limit = rate_limit,
+        retry_budget = retry_budget,
+        on_result = on_result,
+        progress = progress,
+        delivered = delivered
+      )
+    }
   } else {
     list(
       items = items,

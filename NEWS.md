@@ -1,3 +1,19 @@
+# jevr (development version)
+
+* `jev_ask()` accepts an optional `jev_llm()` backend, preserving JEV question
+  definitions and answer classes while making one ellmer structured call per
+  evaluation. Choice and Score are calculated locally, probabilities are
+  validated and marked as LLM self-reports, and confidence is explicitly absent.
+* `jev_llm()` describes a chat factory with explicit model, inference options
+  and semantic configuration. Provenance and execution identity include
+  this description and the upstream provider name obtained from the public Chat
+  interface, without inspecting or hashing the factory or Chat object.
+  ellmer and ellmercodex remain optional integrations.
+* `jev_map()` supports sequential ellmer evaluation with partial results,
+  callbacks, cancellation and an invocation ledger. Concurrency above one and
+  unsupported timeout/retry controls are rejected. The summary distinguishes
+  LLM invocations from observed native HTTP attempts.
+
 # jevr 0.1.2
 
 * `jev_map()` now retains valid answers when an otherwise valid response has

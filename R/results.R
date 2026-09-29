@@ -159,6 +159,9 @@ print.jev_result_set <- function(x, ...) {
     cat("Successes: ", summary$successes, "\n", sep = "")
     cat("Failures: ", summary$failures, "\n", sep = "")
     cat("HTTP attempts: ", summary$http_attempts, "\n", sep = "")
+    if (!is.null(summary$llm_invocations) && summary$llm_invocations > 0L) {
+      cat("LLM invocations: ", summary$llm_invocations, "\n", sep = "")
+    }
   }
   invisible(x)
 }

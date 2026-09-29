@@ -19,12 +19,15 @@ jev_error_record <- function(error) {
   details <- if (is.list(error)) {
     error[names(error) %in% c(
       "status", "provider", "attempts", "retryable", "argument", "retry_at",
-      "scope", "field_path", "request_id"
+      "scope", "field_path", "request_id", "structured_result"
     )]
   } else {
     list()
   }
 
+  if (inherits(error$cause, "condition")) {
+    details$cause <- jev_error_record(error$cause)
+  }
   list(
     class = class(error)[[1L]],
     message = conditionMessage(error),
