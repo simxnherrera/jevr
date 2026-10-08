@@ -158,6 +158,10 @@ print.jev_result_set <- function(x, ...) {
   if (length(summary) > 0L) {
     cat("Successes: ", summary$successes, "\n", sep = "")
     cat("Failures: ", summary$failures, "\n", sep = "")
+    if (length(summary$answered_models) > 0L) {
+      cat("Answered models: ", paste(summary$answered_models, collapse = ", "),
+        "\n", sep = "")
+    }
     cat("HTTP attempts: ", summary$http_attempts, "\n", sep = "")
     if (!is.null(summary$llm_invocations) && summary$llm_invocations > 0L) {
       cat("LLM invocations: ", summary$llm_invocations, "\n", sep = "")
@@ -305,7 +309,10 @@ jev_result_question_definitions <- function(x) {
 #'   `"long"` for one row per state, question, and option; see
 #'   [as.data.frame.jev_response()] for the long-format columns.
 #' @param ... Unused arguments.
-#' @return A data frame with one row per state-question pair. `value`,
+#' @return A data frame with one row per state-question pair, including
+#'   `requested_model`, `answered_model` (the versioned model the server
+#'   reported, `NA` when no response) and `is_alias` (whether the requested
+#'   model is a moving alias such as `jev-latest`). `value`,
 #'   `probabilities`, and `legend` remain list-columns; provenance and error
 #'   fields are returned as scalar columns.
 #' @details
@@ -349,6 +356,9 @@ as.data.frame.jev_result_set <- function(
   status <- character(n)
   execution_id <- character(n)
   request_ref <- character(n)
+  requested_model <- rep(NA_character_, n)
+  answered_model <- rep(NA_character_, n)
+  is_alias <- rep(NA, n)
   spec_hash <- character(n)
   state_hash <- character(n)
   error_class <- rep(NA_character_, n)
@@ -399,6 +409,17 @@ as.data.frame.jev_result_set <- function(
       } else {
         item$request_ref
       }
+      requested_model[[position]] <- if (is.null(item$provenance$requested_model)) {
+        NA_character_
+      } else {
+        item$provenance$requested_model
+      }
+      answered_model[[position]] <- jev_answered_model(item$response)
+      is_alias[[position]] <- if (is.null(item$provenance$is_alias)) {
+        NA
+      } else {
+        item$provenance$is_alias
+      }
       spec_hash[[position]] <- if (is.null(item$provenance$spec_hash)) {
         NA_character_
       } else {
@@ -430,6 +451,9 @@ as.data.frame.jev_result_set <- function(
     status = status,
     execution_id = execution_id,
     request_ref = request_ref,
+    requested_model = requested_model,
+    answered_model = answered_model,
+    is_alias = is_alias,
     spec_hash = spec_hash,
     state_hash = state_hash,
     error_class = error_class,
