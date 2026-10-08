@@ -226,7 +226,9 @@ jev_map_summary <- function(items, requests, started_at, finished_at) {
 #' @param states A character vector or list of complete states. A named input
 #'   supplies durable state IDs; unnamed inputs receive positional IDs.
 #' @param questions A named list of questions or a `jev_spec()` object.
-#' @param provider Provider to use.
+#' @param provider Provider to use: a preset name (`"typesafe"`,
+#'   `"openrouter"`, `"vercel"`, `"pydantic"`, or the legacy
+#'   `"openrouter_decisions"`) or a [jev_endpoint()] object.
 #' @param model Requested model, or the provider default when `NULL`.
 #' @param concurrency Maximum number of active HTTP requests per wave.
 #' @param timeout Maximum seconds for one HTTP attempt.
@@ -287,7 +289,7 @@ jev_map_summary <- function(items, requests, started_at, finished_at) {
 jev_map <- function(
   states,
   questions,
-  provider = c("typesafe", "openrouter"),
+  provider = c("typesafe", "openrouter", "vercel", "pydantic", "openrouter_decisions"),
   model = NULL,
   concurrency = 4L,
   timeout = 30,
@@ -316,7 +318,8 @@ jev_map <- function(
     provider <- "ellmer"
     model <- backend$model
   } else {
-    provider <- match.arg(provider)
+    if (!inherits(provider, "jev_endpoint")) provider <- match.arg(provider)
+    provider <- jev_resolve_provider(provider)
   }
   definition <- jev_map_definition(questions)
   questions <- jev_questions_value(definition)
@@ -353,7 +356,7 @@ jev_map <- function(
       input_index = index,
       durable_id = state_input$durable_ids[[index]],
       definition_hash = definition_hash,
-      provider = provider,
+      provider = jev_provider_name(provider),
       model = model,
       questions = questions,
       definition = definition,

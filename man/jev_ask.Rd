@@ -7,7 +7,7 @@
 jev_ask(
   state,
   questions,
-  provider = c("typesafe", "openrouter"),
+  provider = c("typesafe", "openrouter", "vercel", "pydantic", "openrouter_decisions"),
   model = NULL,
   timeout = 30,
   max_retries = 3,
@@ -23,11 +23,17 @@ JSON array. Other JSON-serializable R values are passed to the provider.}
 jev_choice(), jev_score(), or jev_noul(), or a \code{jev_spec()} object. The
 names become answer IDs.}
 
-\item{provider}{Provider to use: "typesafe" for the direct TypeSafe API or
-"openrouter" for OpenRouter's Decisions endpoint.}
+\item{provider}{Provider to use: a preset name or a \code{\link[=jev_endpoint]{jev_endpoint()}} object.
+Presets are \code{"typesafe"} (direct TypeSafe API), \code{"openrouter"} (OpenRouter's
+native System One endpoint), \code{"vercel"} (Vercel AI Gateway), \code{"pydantic"}
+(Pydantic AI Gateway), and the legacy \code{"openrouter_decisions"} (OpenRouter's
+alpha Decisions endpoint, which drops extra question fields). A custom
+\code{\link[=jev_endpoint]{jev_endpoint()}} is used as given and forwards extra question fields. This
+is distinct from \code{backend}, which selects an ellmer chat.}
 
-\item{model}{Model name. Defaults to the stable jev-latest alias for
-TypeSafe and ~typesafe/jev-latest for OpenRouter.}
+\item{model}{Model name. Defaults to the endpoint's model: \code{jev-latest} for
+TypeSafe and Pydantic, \code{~typesafe/jev-latest} for OpenRouter, and
+\code{typesafe-ai/jev} for Vercel.}
 
 \item{timeout}{Maximum time in seconds for each HTTP attempt.}
 

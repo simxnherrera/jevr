@@ -1,25 +1,25 @@
 jev_default_model <- function(provider) {
-  c(
-    typesafe = "jev-latest",
-    openrouter = "~typesafe/jev-latest"
-  )[[provider]]
-}
-
-jev_api_key_name <- function(provider) {
-  c(
-    typesafe = "TYPESAFE_API_KEY",
-    openrouter = "OPENROUTER_API_KEY"
-  )[[provider]]
+  model <- if (inherits(provider, "jev_endpoint")) provider$model else NULL
+  if (is.null(model)) {
+    jev_abort(
+      paste0(
+        "The ", jev_provider_name(provider),
+        " endpoint has no default model; supply model."
+      ),
+      class = "jev_input_error"
+    )
+  }
+  model
 }
 
 jev_api_key <- function(provider) {
-  name <- jev_api_key_name(provider)
+  name <- provider$api_key_env
   key <- Sys.getenv(name, unset = "")
 
   if (!nzchar(key)) {
     jev_abort(
       paste0(
-        "No API key was found for ", provider, ". Set the ", name,
+        "No API key was found for ", jev_provider_name(provider), ". Set the ", name,
         " environment variable before calling jev_ask()."
       ),
       class = "jev_auth_error"
