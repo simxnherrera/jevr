@@ -110,20 +110,79 @@ jev_required_response_field <- function(answer, field, question_id) {
   answer[[field]]
 }
 
+# Forward compatibility: answers whose kind this version does not understand
+# (or whose kind differs from the declared question type) are kept raw instead
+# of aborting the whole response. The caller emits one warning per response.
+jev_unknown_answer <- function(answer, expected_type, reason) {
+  structure(
+    list(
+      type = answer$type,
+      expected_type = expected_type,
+      reason = reason,
+      raw = answer
+    ),
+    class = c("jev_unknown_answer", "jev_answer", "list")
+  )
+}
+
+jev_warn_unknown_answers <- function(answers) {
+  unknown <- Filter(function(answer) inherits(answer, "jev_unknown_answer"), answers)
+  if (length(unknown) == 0L) {
+    return(invisible(NULL))
+  }
+
+  details <- vapply(
+    names(unknown),
+    function(id) {
+      answer <- unknown[[id]]
+      if (identical(answer$reason, "type_mismatch")) {
+        paste0(id, " (answer type \"", answer$type, "\", expected \"",
+          answer$expected_type, "\")")
+      } else {
+        paste0(id, " (unknown answer type \"", answer$type, "\")")
+      }
+    },
+    character(1)
+  )
+  condition <- structure(
+    class = c("jev_unknown_answer_warning", "jev_warning", "warning", "condition"),
+    list(
+      message = paste0(
+        "Kept ", length(unknown), " answer(s) raw because jevr could not ",
+        "interpret them: ", paste(details, collapse = ", "),
+        ". Access them through `$raw`."
+      ),
+      call = NULL,
+      question_ids = names(unknown)
+    )
+  )
+  warning(condition)
+}
+
 jev_parse_answer <- function(
   answer, question_id, question, allow_missing_confidence = FALSE,
   probability_tolerance = 1e-6
 ) {
   expected_type <- question$type
 
-  if (!is.list(answer) || !identical(answer$type, expected_type)) {
+  if (!is.list(answer) || !is.character(answer$type) ||
+    length(answer$type) != 1L || is.na(answer$type) || !nzchar(answer$type)) {
     jev_abort(
       paste0(
         "Answer ", question_id,
-        " does not match its question type (", expected_type, ")."
+        " is malformed: it must be an object with a type field."
       ),
       class = "jev_response_error"
     )
+  }
+
+  if (!identical(answer$type, expected_type)) {
+    reason <- if (answer$type %in% c("choice", "score", "noul")) {
+      "type_mismatch"
+    } else {
+      "unknown_type"
+    }
+    return(jev_unknown_answer(answer, expected_type, reason))
   }
 
   if (identical(expected_type, "choice")) {
@@ -420,6 +479,8 @@ jev_parse_response_answers <- function(envelope, allow_invalid = FALSE) {
       parsed_answers[[id]] <- answer
     }
   }
+
+  jev_warn_unknown_answers(parsed_answers)
 
   list(answers = parsed_answers, question_errors = question_errors)
 }
