@@ -1,0 +1,158 @@
+---
+title: "Consistency and uncertainty"
+---
+
+A System One answer is a probability distribution, not just a label, and the
+distribution can tell you when not to trust the label. This article covers
+three tools: checking whether a Choice answer depends on the *order* of its
+options, turning confidence into routing bands, and the preflight warnings
+that catch oversized requests. Chunks are not evaluated here.
+
+```{r, eval = FALSE}
+library(jevr)
+```
+
+## First-option bias
+
+The Jev 1.13 notes on model jaggedness document a mild preference for the
+first option of a Choice. For most questions it does not matter, but for
+borderline ones it can flip the answer. The check is cheap: ask the same
+Choice several times, with the options in different orders, in one request.
+
+```{r, eval = FALSE}
+questions <- list(
+  team = jev_choice(
+    "Which team should handle this request?",
+    c(
+      billing   = "Payments, invoices, refunds",
+      technical = "Bugs, outages, integrations",
+      sales     = "Pricing, upgrades, new accounts"
+    )
+  ),
+  urgent = jev_noul("Does this request convey urgency?")
+)
+
+permuted <- jev_permute_choices(questions, n = 3, seed = 42)
+names(permuted)
+```
+
+Every Choice is replaced by `n` copies with reordered options and ids such as
+`team__perm1`; Score and Noul questions pass through. With a `seed` the orders
+are reproducible, and when `n` does not exceed the number of options each
+copy starts with a different option. Keep the returned object: it carries the
+mapping back to the original ids, and a result only stores the expanded
+definition.
+
+A permuted spec is a different definition from the original, so it has a
+different `jev_spec_hash()`; do not mix its results with unpermuted ones.
+
+## Send and collapse
+
+```{r, eval = FALSE}
+response <- jev_ask(
+  "The checkout page crashes whenever I pay by card.",
+  permuted
+)
+
+jev_consistency(response, permuted)
+```
+
+`jev_consistency()` returns one row per state and original Choice question:
+
+- `choice`: option with the highest mean probability across the copies;
+- `agreement`: share of copies whose own choice equals `choice`
+  (1 means order made no difference);
+- `confidence` and `probabilities`: means over the answered copies;
+- `choices` and `orders`: per-copy choice and the order each copy used;
+- `status`: `"success"`, `"partial"` (some copies failed) or `"error"`.
+
+It works the same on `jev_map()` results, with the same `permuted` object:
+
+```{r, eval = FALSE}
+tickets <- c(
+  t1 = "The checkout page crashes whenever I pay by card.",
+  t2 = "Do you offer a discount for annual billing?"
+)
+results <- jev_map(tickets, permuted)
+
+check <- jev_consistency(results, permuted)
+check[, c("state_id", "question_id", "choice", "agreement")]
+unstable <- check[check$agreement < 1, ]
+```
+
+Unstable rows are candidates for human review, for a stronger model, or for a
+rewrite of the option descriptions.
+
+## Confidence bands
+
+Confidence says how concentrated the distribution is, not whether the answer
+is correct. Turn it into labels with `jev_band()`. It never picks thresholds
+for you: `breaks` is required, and good values come from comparing against
+your own labelled data.
+
+```{r, eval = FALSE}
+check$route <- jev_band(
+  check$confidence,
+  breaks = c(0, 0.5, 0.8, 1),
+  labels = c("escalate", "review", "auto")
+)
+table(check$route, useNA = "ifany")
+```
+
+`jev_band()` also reads result objects directly, using `question` to name the
+answer; values are banded with `cut()` semantics, so `right = TRUE` flips the
+interval ends and the outermost end points are always included.
+
+```{r, eval = FALSE}
+names(permuted)  # the copy ids to band
+jev_band(results, question = "team__perm1",
+         breaks = c(0, 0.5, 0.8, 1), labels = c("escalate", "review", "auto"))
+```
+
+For a Noul the uncertain region is the middle, so use symmetric cuts:
+
+```{r, eval = FALSE}
+jev_band(
+  results,
+  question = "urgent",
+  breaks = c(0, 0.3, 0.7, 1),
+  labels = c("no", "uncertain", "yes")
+)
+```
+
+The result is a factor (all levels kept, even when empty) named by state id.
+It is `NA` for failed states, missing or invalid answers, answers with no
+confidence (for example the unavailable-confidence sentinel from a gateway
+fallback), and values outside the outer breaks. Decide explicitly what `NA`
+should do in your pipeline; routing it to review is usually right.
+
+## Preflight warnings
+
+System One documents a 64k-token limit per request and a 32k-token limit for
+the state plus the longest question. Choice questions allow at most 255
+options and Score questions 2 to 10 levels; breaking those is an immediate
+`jev_input_error`.
+
+The size limits are approximate on the client. Before sending, jevr
+estimates tokens as serialized characters divided by four and, if a limit
+looks exceeded, signals a warning of class `jev_preflight_warning`. The
+request is still sent, because the estimate can be wrong in either direction.
+`jev_map()` collects affected states into one warning listing their ids.
+
+```{r, eval = FALSE}
+withCallingHandlers(
+  jev_map(very_long_documents, questions),
+  jev_preflight_warning = function(w) {
+    message("Large request: ", conditionMessage(w))
+    invokeRestart("muffleWarning")
+  }
+)
+```
+
+Permuting multiplies question size, so check large Choice sets after
+`jev_permute_choices()`. If the estimate is a nuisance in a pipeline that you
+have already validated, switch it off for the session:
+
+```{r, eval = FALSE}
+options(jevr.preflight = FALSE)
+```

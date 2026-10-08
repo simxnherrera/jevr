@@ -1,0 +1,155 @@
+---
+title: "Date extraction"
+---
+
+Language models are good at reading messy text and poor at calendar
+arithmetic. A reliable extraction pipeline keeps those jobs apart: the model
+*reads* the date parts out of a document, and R code assembles, validates and
+compares the dates. This article adapts the pattern from the TypeSafe date
+extraction cookbook. Chunks are not evaluated here.
+
+```{r, eval = FALSE}
+library(jevr)
+```
+
+## One Choice per date part
+
+Ask for the year, month and day as three separate Choice questions. Each
+Choice includes an explicit `not_stated` option, so a document that says
+"sometime in March" can answer "March" for the month and "not stated" for the
+day instead of being forced to invent one.
+
+```{r, eval = FALSE}
+months <- c(
+  "01" = "January", "02" = "February", "03" = "March", "04" = "April",
+  "05" = "May", "06" = "June", "07" = "July", "08" = "August",
+  "09" = "September", "10" = "October", "11" = "November", "12" = "December"
+)
+years <- setNames(as.character(2023:2027), 2023:2027)
+days  <- setNames(sprintf("Day %d of the month", 1:31), sprintf("%02d", 1:31))
+
+with_not_stated <- function(options) {
+  c(options, not_stated = "The document does not say")
+}
+
+questions <- list(
+  year = jev_choice(
+    "In what year does the invoice say payment is due?",
+    with_not_stated(years)
+  ),
+  month = jev_choice(
+    "In what month does the invoice say payment is due?",
+    with_not_stated(months)
+  ),
+  day = jev_choice(
+    "On what day of the month does the invoice say payment is due?",
+    with_not_stated(days)
+  )
+)
+```
+
+A Choice may have up to 255 options, so the day question fits comfortably.
+Keep the option names machine friendly (`"03"`, `"not_stated"`); the
+descriptions are what the model reads.
+
+## Extract from many documents
+
+```{r, eval = FALSE}
+documents <- c(
+  inv_1 = "Payment is due by 14 March 2025. Thank you for your business.",
+  inv_2 = "Please settle this invoice within thirty days. Ref 8812.",
+  inv_3 = "Due: 2025-11-02"
+)
+
+results <- jev_map(documents, questions, concurrency = 3)
+```
+
+## Assemble and compare in code
+
+The long format has one row per option; `selected` marks the chosen one. Pull
+the chosen option per state and question, then build the date in R.
+
+```{r, eval = FALSE}
+long <- as.data.frame(results, format = "long")
+chosen <- long[long$selected %in% TRUE, c("state_id", "question_id", "option")]
+
+parts <- reshape(
+  chosen,
+  idvar = "state_id", timevar = "question_id", direction = "wide"
+)
+names(parts) <- sub("^option\\.", "", names(parts))
+
+complete <- parts$year != "not_stated" & parts$month != "not_stated" &
+  parts$day != "not_stated"
+text <- paste(parts$year, parts$month, parts$day, sep = "-")
+parts$due <- as.Date(ifelse(complete, text, NA_character_), format = "%Y-%m-%d")
+parts
+```
+
+Passing `format` makes impossible combinations such as `2025-02-30` come
+back as `NA` instead of raising an error. Treat every `NA` in `due` as "needs
+review"; it means either that a part was not stated or that the parts do not
+form a real date.
+
+Now the arithmetic the model never does:
+
+```{r, eval = FALSE}
+parts$days_until_due <- as.numeric(parts$due - Sys.Date())
+parts$overdue <- parts$due < Sys.Date()
+```
+
+## Gate review on confidence
+
+Each Choice answer carries a confidence. Cut it into routing bands with
+`jev_band()`. The package supplies no default thresholds; pick them from
+labelled documents of your own.
+
+```{r, eval = FALSE}
+band_for <- function(id) {
+  jev_band(
+    results,
+    question = id,
+    breaks = c(0, 0.6, 0.85, 1),
+    labels = c("review", "check", "auto")
+  )
+}
+
+bands <- data.frame(
+  state_id = names(results),
+  year  = band_for("year"),
+  month = band_for("month"),
+  day   = band_for("day"),
+  row.names = NULL
+)
+```
+
+The result is a factor named by state ID (`NA` for failed states or answers
+without a confidence). Combine the parts conservatively: a date is only as
+trustworthy as its weakest part.
+
+```{r, eval = FALSE}
+rank_of <- function(x) match(as.character(x), c("review", "check", "auto"))
+weakest <- pmin(rank_of(bands$year), rank_of(bands$month), rank_of(bands$day))
+bands$route <- factor(c("review", "check", "auto")[weakest],
+                      levels = c("review", "check", "auto"))
+
+needs_review <- merge(parts, bands, by = "state_id")
+needs_review <- needs_review[is.na(needs_review$due) |
+                               needs_review$route %in% c("review", NA), ]
+```
+
+Missing dates (`NA`) and `NA` bands both go to review: an absent confidence is
+not a high one.
+
+## Reading the probabilities
+
+When a document is ambiguous you can see it in the distribution rather than
+only in the winner:
+
+```{r, eval = FALSE}
+subset(long, state_id == "inv_2" & question_id == "month" & probability > 0.05,
+       select = c(option, probability, selected))
+```
+
+If `not_stated` carries most of the mass, the right behaviour is to leave the
+date empty and route the document to a person, which the code above does.

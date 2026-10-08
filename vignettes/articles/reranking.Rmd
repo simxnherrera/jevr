@@ -1,0 +1,128 @@
+---
+title: "Reranking"
+---
+
+A reranker orders candidates by how well they answer a query. With System One
+the model does only the part that needs judgment: *how relevant is this one
+candidate to this one query?* Retrieval, tie-breaking, thresholds and the
+final sort stay in ordinary R code. This article adapts the idea from the
+TypeSafe reranking cookbook; chunks are not evaluated here.
+
+```{r, eval = FALSE}
+library(jevr)
+```
+
+## Retrieve in code, judge pairs with the model
+
+Assume a first-stage retriever (BM25, vector search, a SQL filter) already
+returned a handful of candidates per query. The model never sees the whole
+list, so candidate order cannot bias it and the list can be as long as you
+like.
+
+```{r, eval = FALSE}
+candidates <- data.frame(
+  query_id = c("q1", "q1", "q1", "q2", "q2"),
+  doc_id   = c("d1", "d2", "d3", "d4", "d5"),
+  query    = c(rep("how do I reset my password", 3),
+               rep("export invoices to csv", 2)),
+  text     = c(
+    "Open Settings, choose Security, and select Reset password.",
+    "Our pricing plans include a free tier.",
+    "Passwords must contain at least twelve characters.",
+    "Invoices can be downloaded as CSV from the Billing page.",
+    "Contact sales for volume discounts."
+  ),
+  stringsAsFactors = FALSE
+)
+candidates$key <- paste(candidates$query_id, candidates$doc_id, sep = "/")
+```
+
+## One comparable question per pair
+
+Each query-candidate pair becomes one *state*. Use a single Score question
+with the same levels for every pair so the numbers are comparable across
+states. Describe the levels concretely; an unanchored "how relevant" scale is
+vague.
+
+```{r, eval = FALSE}
+questions <- list(
+  relevance = jev_score(
+    "How well does the document answer the query?",
+    c(
+      "Unrelated to the query",
+      "Same topic but does not answer it",
+      "Partially answers the query",
+      "Directly and fully answers the query"
+    )
+  )
+)
+
+states <- lapply(seq_len(nrow(candidates)), function(i) {
+  list(query = candidates$query[i], document = candidates$text[i])
+})
+names(states) <- candidates$key
+```
+
+A Noul ("Does this document answer the query?") works too when you only need
+a filter. Score returns a probability-weighted position, so it separates
+close candidates better.
+
+## Run the pairs with `jev_map()`
+
+```{r, eval = FALSE}
+results <- jev_map(states, questions, concurrency = 4)
+results
+```
+
+`jev_map()` keeps input order and the state IDs you named. A failed pair
+becomes a failed result rather than aborting the run.
+
+## Rank in code
+
+The long format returns one row per state, question and level. For a Score
+question the `score` column holds the probability-weighted expectation, so
+keep one row per state before joining.
+
+```{r, eval = FALSE}
+long <- as.data.frame(results, format = "long")
+rel <- long[long$question_id == "relevance" & !duplicated(long$state_id), ]
+
+scores <- data.frame(key = rel$state_id, score = rel$score, model = rel$model)
+ranked <- merge(candidates, scores, by = "key")
+
+ranked <- ranked[order(ranked$query_id, -ranked$score), ]
+ranked$rank <- ave(-ranked$score, ranked$query_id, FUN = rank)
+ranked[, c("query_id", "doc_id", "score", "rank")]
+```
+
+Everything after `jev_map()` is plain data-frame work, so you can add your
+own rules: break ties by recency, keep the top `k`, or drop documents scoring
+under a threshold you chose by looking at labelled examples.
+
+```{r, eval = FALSE}
+top <- do.call(rbind, lapply(split(ranked, ranked$query_id), head, n = 3))
+```
+
+## Failed pairs and provenance
+
+Check status before trusting a ranking. In long format a failed pair has a
+single row with `NA` score and the error in `error_class`.
+
+```{r, eval = FALSE}
+subset(long, status != "success",
+       select = c(state_id, status, error_class, error_message))
+
+unique(long$model)  # versioned model(s) that produced the scores
+summary(results)$answered_models
+```
+
+Scores from different model versions are not strictly comparable. If a run
+reports more than one answered model (a `jev_model_drift_warning`), re-run it
+pinned to one versioned model, as described in the endpoints article.
+
+## Why not rank one list at once?
+
+Giving the model every candidate in one prompt couples each answer to
+position and to the other candidates. Independent pair scores are
+cacheable (execution ids are stable per state and spec), parallel, and
+auditable one row at a time.
