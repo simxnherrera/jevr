@@ -4,7 +4,13 @@
 \alias{as.data.frame.jev_result_set}
 \title{Convert a result set to one row per state and requested question}
 \usage{
-\method{as.data.frame}{jev_result_set}(x, row.names = NULL, optional = FALSE, ...)
+\method{as.data.frame}{jev_result_set}(
+  x,
+  row.names = NULL,
+  optional = FALSE,
+  format = c("wide", "long"),
+  ...
+)
 }
 \arguments{
 \item{x}{A \code{jev_result_set}.}
@@ -12,6 +18,10 @@
 \item{row.names}{Passed to \code{data.frame()}.}
 
 \item{optional}{Passed to \code{data.frame()}.}
+
+\item{format}{\code{"wide"} (default) for one row per state and question, or
+\code{"long"} for one row per state, question, and option; see
+\code{\link[=as.data.frame.jev_response]{as.data.frame.jev_response()}} for the long-format columns.}
 
 \item{...}{Unused arguments.}
 }
