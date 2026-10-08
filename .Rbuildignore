@@ -8,3 +8,4 @@
 ^_pkgdown\.yml$
 ^plans$
 ^tools$
+^\.claude$
