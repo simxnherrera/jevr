@@ -1,4 +1,4 @@
-# jevr (development version)
+# jevr 0.2.0
 
 * `jev_ask()` accepts an optional `jev_llm()` backend, preserving JEV question
   definitions and answer classes while making one ellmer structured call per
