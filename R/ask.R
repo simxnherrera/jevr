@@ -87,7 +87,9 @@ jev_validate_request_options <- function(timeout, max_retries) {
 #'   Presets are `"typesafe"` (direct TypeSafe API), `"openrouter"` (OpenRouter's
 #'   native System One endpoint), `"vercel"` (Vercel AI Gateway), `"pydantic"`
 #'   (Pydantic AI Gateway), and the legacy `"openrouter_decisions"` (OpenRouter's
-#'   alpha Decisions endpoint). A custom [jev_endpoint()] is used as given.
+#'   alpha Decisions endpoint, which drops extra question fields). A custom
+#'   [jev_endpoint()] is used as given and forwards extra question fields. This
+#'   is distinct from `backend`, which selects an ellmer chat.
 #' @param model Model name. Defaults to the endpoint's model: `jev-latest` for
 #'   TypeSafe and Pydantic, `~typesafe/jev-latest` for OpenRouter, and
 #'   `typesafe-ai/jev` for Vercel.

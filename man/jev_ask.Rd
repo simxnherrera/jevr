@@ -27,7 +27,9 @@ names become answer IDs.}
 Presets are \code{"typesafe"} (direct TypeSafe API), \code{"openrouter"} (OpenRouter's
 native System One endpoint), \code{"vercel"} (Vercel AI Gateway), \code{"pydantic"}
 (Pydantic AI Gateway), and the legacy \code{"openrouter_decisions"} (OpenRouter's
-alpha Decisions endpoint). A custom \code{\link[=jev_endpoint]{jev_endpoint()}} is used as given.}
+alpha Decisions endpoint, which drops extra question fields). A custom
+\code{\link[=jev_endpoint]{jev_endpoint()}} is used as given and forwards extra question fields. This
+is distinct from \code{backend}, which selects an ellmer chat.}
 
 \item{model}{Model name. Defaults to the endpoint's model: \code{jev-latest} for
 TypeSafe and Pydantic, \code{~typesafe/jev-latest} for OpenRouter, and
