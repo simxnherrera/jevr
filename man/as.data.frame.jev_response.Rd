@@ -21,7 +21,7 @@
 \value{
 A data frame with columns \code{state_id}, \code{question_id}, \code{type},
 \code{option}, \code{probability}, \code{selected}, \code{confidence}, \code{score}, \code{noul},
-\code{model} (the versioned model that answered), \code{requested_model}, \code{status}, \code{error_class}, and \code{error_message}.
+\code{model} (the versioned model that answered), \code{requested_model}, \code{is_alias}, \code{status}, \code{error_class}, and \code{error_message}.
 }
 \description{
 \code{as.data.frame()} methods for \code{jev_response} and \code{jev_result}, and the

@@ -11,6 +11,7 @@ jev_long_empty <- function() {
     noul = numeric(),
     model = character(),
     requested_model = character(),
+    is_alias = logical(),
     status = character(),
     error_class = character(),
     error_message = character(),
@@ -79,6 +80,10 @@ jev_long_question_rows <- function(
     model = rep(if (is.null(model)) na_chr else as.character(model), n),
     requested_model = rep(
       if (is.null(requested_model)) na_chr else as.character(requested_model),
+      n
+    ),
+    is_alias = rep(
+      if (is.null(requested_model)) NA else jev_model_is_alias(requested_model),
       n
     ),
     status = rep(status, n),
@@ -164,7 +169,7 @@ jev_long_reject_wide <- function(format) {
 #' @param ... Unused arguments.
 #' @return A data frame with columns `state_id`, `question_id`, `type`,
 #'   `option`, `probability`, `selected`, `confidence`, `score`, `noul`,
-#'   `model` (the versioned model that answered), `requested_model`, `status`, `error_class`, and `error_message`.
+#'   `model` (the versioned model that answered), `requested_model`, `is_alias`, `status`, `error_class`, and `error_message`.
 #' @details
 #' Choice and score rows carry the answer's probability for each option or
 #' level; probabilities per question sum to 1. For choice, `selected` marks

@@ -73,9 +73,12 @@ invalid envelope or answer raises an error for the evaluation. Use
 }
 \section{Authentication}{
 
-Set TYPESAFE_API_KEY for the direct TypeSafe provider or
-OPENROUTER_API_KEY for OpenRouter. Keys are read at request time and are
-never stored in the returned object.
+Each preset reads its key from an environment variable: TYPESAFE_API_KEY
+(\code{"typesafe"}), OPENROUTER_API_KEY (\code{"openrouter"} and
+\code{"openrouter_decisions"}), AI_GATEWAY_API_KEY (\code{"vercel"}) and
+PYDANTIC_AI_GATEWAY_API_KEY (\code{"pydantic"}). A custom \code{\link[=jev_endpoint]{jev_endpoint()}} names
+its own variable. Keys are read at request time and are never stored in the
+returned object.
 }
 
 \section{Request limits}{

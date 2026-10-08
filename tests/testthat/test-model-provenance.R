@@ -104,3 +104,20 @@ test_that("results record requested and answered models", {
     c("jev-1.13.0", "jev-1.14.0")
   )
 })
+
+test_that("long format flags alias requests like the wide format", {
+  response <- jev_parse_response(
+    list(
+      model = "jev-1.13.0",
+      answers = list(urgent = list(type = "noul", noul = 0.9)),
+      usage = list(input_tokens = 1, output_tokens = 1)
+    ),
+    "typesafe",
+    list(urgent = jev_noul("Urgent?"))
+  )
+  response$metadata$requested_model <- "jev-latest"
+  long <- as.data.frame(response, format = "long")
+  expect_true(all(long$is_alias))
+  response$metadata$requested_model <- "jev-1.13.0"
+  expect_false(any(as.data.frame(response, format = "long")$is_alias))
+})

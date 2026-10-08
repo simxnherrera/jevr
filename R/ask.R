@@ -120,9 +120,12 @@ jev_validate_request_options <- function(timeout, max_retries) {
 #'   `jev_map()` when collection-level partial results are needed.
 #'
 #' @section Authentication:
-#' Set TYPESAFE_API_KEY for the direct TypeSafe provider or
-#' OPENROUTER_API_KEY for OpenRouter. Keys are read at request time and are
-#' never stored in the returned object.
+#' Each preset reads its key from an environment variable: TYPESAFE_API_KEY
+#' (`"typesafe"`), OPENROUTER_API_KEY (`"openrouter"` and
+#' `"openrouter_decisions"`), AI_GATEWAY_API_KEY (`"vercel"`) and
+#' PYDANTIC_AI_GATEWAY_API_KEY (`"pydantic"`). A custom [jev_endpoint()] names
+#' its own variable. Keys are read at request time and are never stored in the
+#' returned object.
 #'
 #' @section Request limits:
 #' Choice questions are limited to 255 options and Score questions to 2-10

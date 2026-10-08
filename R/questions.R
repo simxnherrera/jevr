@@ -477,13 +477,6 @@ jev_validate_questions <- function(questions) {
 #'   `instructions`, or `criteria`. The `ellmer` and legacy OpenRouter
 #'   backends ignore them.
 #'
-#' @param ... Optional extra named fields (JSON-serializable) forwarded to
-#'   the request body unchanged and included in the spec hash. Use them for
-#'   question fields that newer TypeSafe API versions accept but this version
-#'   of jevr does not model. Names must be unique and cannot be `type`,
-#'   `instructions`, or `criteria`. The `ellmer` and legacy OpenRouter
-#'   backends ignore them.
-#'
 #' @return An object of class jev_choice_question and jev_question.
 #' @export
 #' @examples
@@ -527,13 +520,6 @@ jev_choice <- function(instructions, criteria, ...) {
 #'   `instructions`, or `criteria`. The `ellmer` and legacy OpenRouter
 #'   backends ignore them.
 #'
-#' @param ... Optional extra named fields (JSON-serializable) forwarded to
-#'   the request body unchanged and included in the spec hash. Use them for
-#'   question fields that newer TypeSafe API versions accept but this version
-#'   of jevr does not model. Names must be unique and cannot be `type`,
-#'   `instructions`, or `criteria`. The `ellmer` and legacy OpenRouter
-#'   backends ignore them.
-#'
 #' @return An object of class jev_score_question and jev_question.
 #' @export
 #' @examples
@@ -568,13 +554,6 @@ jev_score <- function(instructions, criteria, ...) {
 #'   so a high value means yes.
 #' @param criteria Optional named character vector or list with exactly true
 #'   and false descriptions. Omit it when the instruction is sufficient.
-#'
-#' @param ... Optional extra named fields (JSON-serializable) forwarded to
-#'   the request body unchanged and included in the spec hash. Use them for
-#'   question fields that newer TypeSafe API versions accept but this version
-#'   of jevr does not model. Names must be unique and cannot be `type`,
-#'   `instructions`, or `criteria`. The `ellmer` and legacy OpenRouter
-#'   backends ignore them.
 #'
 #' @param ... Optional extra named fields (JSON-serializable) forwarded to
 #'   the request body unchanged and included in the spec hash. Use them for
