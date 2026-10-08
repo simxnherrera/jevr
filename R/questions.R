@@ -336,67 +336,6 @@ jev_question_has_valid_shape <- function(question, argument = "question") {
   !is.null(result)
 }
 
-jev_question_core_names <- c("type", "instructions", "criteria")
-
-# Extra named fields are forwarded to the request body unchanged (forward
-# compatibility with fields this version of jevr does not know about).
-jev_validate_question_extras <- function(extras, argument = "...") {
-  if (length(extras) == 0L) {
-    return(list())
-  }
-
-  extra_names <- names(extras)
-  if (is.null(extra_names) || anyNA(extra_names) || any(!nzchar(extra_names))) {
-    jev_abort(
-      paste0("All extra question fields in ", argument, " must be named."),
-      class = "jev_input_error"
-    )
-  }
-
-  if (anyDuplicated(extra_names)) {
-    jev_abort(
-      paste0("Extra question fields in ", argument, " must have unique names."),
-      class = "jev_input_error"
-    )
-  }
-
-  reserved <- intersect(extra_names, jev_question_core_names)
-  if (length(reserved) > 0L) {
-    jev_abort(
-      paste0(
-        "Extra question fields cannot reuse reserved names: ",
-        paste(reserved, collapse = ", "), "."
-      ),
-      class = "jev_input_error"
-    )
-  }
-
-  for (name in extra_names) {
-    jev_validate_json_value(extras[[name]], paste0(argument, "$", name))
-  }
-
-  as.list(extras)
-}
-
-# TRUE when `question` has the core fields first, followed only by valid extras.
-jev_question_has_valid_shape <- function(question, argument = "question") {
-  question_names <- names(question)
-  if (length(question_names) < 3L ||
-    !identical(question_names[1:3], jev_question_core_names)) {
-    return(FALSE)
-  }
-
-  extras <- question[-(1:3)]
-  if (length(extras) == 0L) {
-    return(TRUE)
-  }
-  result <- tryCatch(
-    jev_validate_question_extras(unclass(extras), argument),
-    jev_input_error = function(error) NULL
-  )
-  !is.null(result)
-}
-
 jev_validate_questions <- function(questions) {
   if (!is.list(questions) || length(questions) == 0L) {
     jev_abort(

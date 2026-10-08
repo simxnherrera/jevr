@@ -274,10 +274,6 @@ jev_result_value <- function(answer) {
     return(NULL)
   }
 
-  if (inherits(answer, "jev_unknown_answer")) {
-    return(NULL)
-  }
-
   switch(
     answer$type,
     choice = answer$choice,

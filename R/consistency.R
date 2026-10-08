@@ -291,6 +291,13 @@ jev_permutation_plan <- function(permuted) {
 jev_consistency_row <- function(state_id, input_index, id, entry, answers) {
   options <- entry$options
   answered <- intersect(entry$copy_ids, names(answers))
+  # Unknown or mismatched answers are kept raw by the parser; treat them as
+  # unanswered copies rather than failing the whole summary.
+  answered <- answered[!vapply(
+    answers[answered],
+    function(answer) inherits(answer, "jev_unknown_answer"),
+    logical(1)
+  )]
   probabilities <- NULL
   choices <- character()
   confidences <- numeric()

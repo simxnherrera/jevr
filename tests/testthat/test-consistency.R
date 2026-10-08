@@ -248,3 +248,19 @@ test_that("answers from another question set are rejected", {
     class = "jev_input_error"
   )
 })
+
+test_that("unknown answers count as unanswered copies", {
+  questions <- consistency_questions()
+  permuted <- jev_permute_choices(questions, n = 3, seed = 1)
+  response <- consistency_response(permuted)
+  response$answers$team__perm2 <- structure(
+    list(type = "mystery", expected_type = "choice", reason = "unknown_type",
+      raw = list(type = "mystery")),
+    class = c("jev_unknown_answer", "jev_answer", "list")
+  )
+  out <- jev_consistency(response, permuted)
+  team <- out[out$question_id == "team", ]
+  expect_equal(team$n_answered, 2L)
+  expect_equal(team$status, "partial")
+  expect_false("team__perm2" %in% names(team$choices[[1]]))
+})
