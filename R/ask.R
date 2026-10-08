@@ -105,7 +105,8 @@ jev_validate_request_options <- function(timeout, max_retries) {
 #'   normalized USD cost (`usage.cost`, else Vercel
 #'   `provider_metadata.gateway.cost`; omitted when absent or invalid; the map ledger records `NA`).
 #'   `metadata$provider_metadata` keeps gateway metadata verbatim, with
-#'   `metadata$final_provider` and `metadata$generation_id` when present. With an ellmer
+#'   `metadata$final_provider` and `metadata$generation_id` when present; `metadata$requested_model` is the
+#'   model asked for. With an ellmer
 #'   backend, raw is the received structured object; answers are the validated
 #'   jevr representation with locally calculated decisions.
 #' @details `jev_ask()` keeps strict response parsing for compatibility: an
@@ -209,5 +210,6 @@ jev_ask <- function(
     result$metadata,
     jev_response_metadata(response, provider_name)
   )
+  result$metadata$requested_model <- model
   result
 }

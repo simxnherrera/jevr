@@ -74,3 +74,22 @@ test_that("jev_map ledger carries gateway cost without double counting", {
   expect_equal(requests$cost, c(0.00001155, 0.00001155))
   expect_equal(summary(result)$observed_cost, 2 * 0.00001155)
 })
+
+test_that("jev_ask records the requested model and long format reports it", {
+  withr::local_envvar(TYPESAFE_API_KEY = "k")
+  mock <- function(req) {
+    httr2::response(
+      status_code = 200,
+      headers = list("Content-Type" = "application/json"),
+      body = charToRaw(gateway_body())
+    )
+  }
+  result <- httr2::with_mocked_responses(
+    mock,
+    jev_ask("x", list(urgent = jev_noul("Urgent?")), max_retries = 0)
+  )
+  expect_identical(result$metadata$requested_model, "jev-latest")
+  long <- as.data.frame(result)
+  expect_true(all(long$requested_model == "jev-latest"))
+  expect_true(all(long$model == "jev-1.13.0"))
+})
