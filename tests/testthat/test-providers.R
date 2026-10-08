@@ -161,3 +161,20 @@ test_that("HTTP errors include status and corrective guidance", {
     )
   )
 })
+
+test_that("Noul questions without criteria omit the field instead of sending null", {
+  payload <- jevr:::jev_request_payload(
+    "state",
+    list(
+      bare = jev_noul("Urgent?"),
+      described = jev_noul("Urgent?", c(true = "Yes", false = "No"))
+    ),
+    "jev-latest"
+  )
+  json <- jsonlite::fromJSON(
+    jsonlite::toJSON(payload, auto_unbox = TRUE, null = "null"),
+    simplifyVector = FALSE
+  )
+  expect_false("criteria" %in% names(json$questions$bare))
+  expect_identical(json$questions$described$criteria$true, "Yes")
+})

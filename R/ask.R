@@ -1,5 +1,13 @@
 jev_request_payload <- function(state, questions, model) {
-  serialized_questions <- lapply(questions, unclass)
+  # Optional criteria (Noul) are omitted rather than sent as JSON null, which
+  # some TypeSafe-format endpoints reject.
+  serialized_questions <- lapply(questions, function(question) {
+    question <- unclass(question)
+    if ("criteria" %in% names(question) && is.null(question$criteria)) {
+      question$criteria <- NULL
+    }
+    question
+  })
   names(serialized_questions) <- names(questions)
 
   list(

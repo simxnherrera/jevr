@@ -20,7 +20,10 @@
   One protocol (`<base_url>/v1/systemone`). `provider` in `jev_ask()` and
   `jev_map()` accepts an endpoint or a preset name: `"typesafe"` (honours
   `TYPESAFE_BASE_URL`), `"openrouter"`, `"vercel"` (Vercel AI Gateway) and
-  `"pydantic"` (Pydantic AI Gateway).
+  `"pydantic"` (Pydantic AI Gateway). The Vercel and Pydantic presets are
+  tested against their documented request and response shapes only.
+* Noul questions without criteria now omit `criteria` from the request body
+  instead of sending `null`, which OpenRouter's System One endpoint rejects.
 * `provider = "openrouter"` now uses OpenRouter's native
   `/api/v1/systemone` endpoint. The previous alpha Decisions mapping remains
   available as `provider = "openrouter_decisions"`; execution ids and
