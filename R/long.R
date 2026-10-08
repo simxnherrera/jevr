@@ -48,6 +48,11 @@ jev_long_question_rows <- function(
       probs <- answer$probabilities
       options <- names(probs)
       probability <- unname(as.numeric(probs))
+      if (length(probs) == 0L) {
+        # Unavailable sentinel without known options: keep one NA row.
+        options <- na_chr
+        probability <- na_num
+      }
       confidence <- if (is.null(answer$confidence)) na_num else answer$confidence
       if (identical(type, "choice")) {
         selected <- options == answer$choice

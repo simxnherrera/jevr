@@ -11,7 +11,8 @@ jev_execution_id(
   model,
   endpoint_contract_version = 1L,
   inference_options = list(),
-  routing_options = list()
+  routing_options = list(),
+  fallback = NULL
 )
 }
 \arguments{
@@ -28,6 +29,10 @@ jev_execution_id(
 \item{inference_options}{Options that affect inference semantics.}
 
 \item{routing_options}{Options that affect request routing semantics.}
+
+\item{fallback}{Optional \code{\link[=jev_fallback]{jev_fallback()}}. A fallback changes which model
+produces the answers, so it is part of the identity; when \code{NULL} the
+identity is unchanged from earlier versions.}
 }
 \value{
 A lowercase SHA-256 hexadecimal hash.

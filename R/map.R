@@ -105,7 +105,8 @@ jev_map_item <- function(
   model,
   questions,
   definition,
-  backend = NULL
+  backend = NULL,
+  fallback = NULL
 ) {
   provenance <- list(
     spec_name = if (inherits(definition, "jev_spec")) definition$name else NULL,
@@ -155,7 +156,7 @@ jev_map_item <- function(
   item$state <- validated
   item$provenance$state_hash <- jev_state_hash(validated)
   item$provenance$execution_id <- if (is.null(backend)) {
-    jev_execution_id(validated, definition, provider, model)
+    jev_execution_id(validated, definition, provider, model, fallback = fallback)
   } else {
     NA_character_
   }
@@ -246,6 +247,9 @@ jev_map_summary <- function(items, requests, started_at, finished_at) {
 #' @param retry_budget Maximum seconds for retries and waits for one state.
 #' @param on_result Optional caller-owned callback for each terminal result.
 #' @param progress Display execution progress.
+#' @param fallback Optional [jev_fallback()] applied to every request; see
+#'   [jev_ask()]. It is part of each state's `execution_id`. Cannot be combined
+#'   with `backend`.
 #' @param backend Optional `jev_llm()` backend. This route is sequential:
 #'   `concurrency` defaults to one and larger values are rejected. Explicit
 #'   `provider`, `model`, `timeout`, `retry_budget`, and positive `max_retries`
@@ -316,9 +320,13 @@ jev_map <- function(
   retry_budget = 120,
   on_result = NULL,
   progress = interactive(),
-  backend = NULL
+  backend = NULL,
+  fallback = NULL
 ) {
   if (!is.null(backend)) {
+    if (!is.null(fallback)) {
+      jev_abort("fallback cannot be combined with an ellmer backend.", class = "jev_input_error")
+    }
     jev_validate_llm_options(
       backend, !missing(provider), !missing(model),
       !missing(timeout), if (missing(max_retries)) 0 else max_retries
@@ -361,6 +369,10 @@ jev_map <- function(
     )
   }
 
+  if (is.null(backend)) {
+    jev_validate_fallback(fallback, questions, provider, model)
+  }
+
   state_input <- jev_map_states(states)
   definition_hash <- jev_spec_hash(definition)
   definition_manifest <- jev_definition_manifest(definition)
@@ -378,7 +390,8 @@ jev_map <- function(
       model = model,
       questions = questions,
       definition = definition,
-      backend = backend
+      backend = backend,
+      fallback = fallback
     )
   })
 
@@ -449,7 +462,8 @@ jev_map <- function(
         retry_budget = retry_budget,
         on_result = on_result,
         progress = progress,
-        delivered = delivered
+        delivered = delivered,
+        fallback = fallback
       )
     }
   } else {

@@ -26,6 +26,11 @@
 #'   `Authorization` cannot be set here.
 #' @param name Short name recorded in result metadata and used in execution
 #'   identity. Defaults to the host and path of `base_url`.
+#' @param capabilities Character vector of optional features the server
+#'   supports. The only recognised value is `"fallback"`: the server accepts
+#'   Vercel AI Gateway's `providerOptions.gateway.models` decision-fallback
+#'   extension (see [jev_fallback()]). The `"vercel"` preset has it; set it
+#'   only for custom endpoints that are Vercel-compatible.
 #'
 #' @return An object of class `jev_endpoint`.
 #' @export
@@ -49,11 +54,12 @@ jev_endpoint <- function(
   api_key_env,
   model = NULL,
   headers = list(),
-  name = NULL
+  name = NULL,
+  capabilities = character()
 ) {
   jev_endpoint_new(
     base_url, api_key_env, model, headers, name,
-    protocol = "systemone"
+    protocol = "systemone", capabilities = capabilities
   )
 }
 
@@ -67,7 +73,8 @@ jev_endpoint_new <- function(
   model,
   headers,
   name,
-  protocol
+  protocol,
+  capabilities = character()
 ) {
   fail <- function(message) {
     jev_abort(paste0("jev_endpoint(): ", message), class = "jev_input_error")
@@ -103,6 +110,11 @@ jev_endpoint_new <- function(
     fail("name must be NULL or one non-empty string.")
   }
 
+  if (!is.character(capabilities) || anyNA(capabilities) ||
+    !all(capabilities %in% "fallback")) {
+    fail("capabilities must be NULL or a character vector; only \"fallback\" is recognised.")
+  }
+
   structure(
     list(
       name = name,
@@ -110,7 +122,8 @@ jev_endpoint_new <- function(
       api_key_env = api_key_env,
       model = model,
       headers = headers,
-      protocol = protocol
+      protocol = protocol,
+      capabilities = unique(capabilities)
     ),
     class = "jev_endpoint"
   )
@@ -123,6 +136,10 @@ print.jev_endpoint <- function(x, ...) {
   cat("API key: $", x$api_key_env, "\n", sep = "")
   cat("Model:   ", if (is.null(x$model)) "<none>" else x$model, "\n", sep = "")
   invisible(x)
+}
+
+jev_endpoint_supports <- function(endpoint, capability) {
+  capability %in% endpoint$capabilities
 }
 
 jev_endpoint_url <- function(endpoint) {
@@ -165,7 +182,8 @@ jev_endpoint_preset <- function(name) {
     ),
     vercel = jev_endpoint_new(
       "https://ai-gateway.vercel.sh/typesafe", "AI_GATEWAY_API_KEY",
-      "typesafe-ai/jev", list(), "vercel", "systemone"
+      "typesafe-ai/jev", list(), "vercel", "systemone",
+      capabilities = "fallback"
     ),
     pydantic = jev_endpoint_new(
       "https://gateway-us.pydantic.dev/proxy/typesafe",

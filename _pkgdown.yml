@@ -6,6 +6,8 @@ reference:
       - jev_ask
       - jev_endpoint
       - jev_models
+      - jev_fallback
+      - jev_when
       - jev_llm
       - jev_map
       - jev_spec

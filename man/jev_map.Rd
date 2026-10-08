@@ -16,7 +16,8 @@ jev_map(
   retry_budget = 120,
   on_result = NULL,
   progress = interactive(),
-  backend = NULL
+  backend = NULL,
+  fallback = NULL
 )
 }
 \arguments{
@@ -49,6 +50,10 @@ supplies durable state IDs; unnamed inputs receive positional IDs.}
 \code{concurrency} defaults to one and larger values are rejected. Explicit
 \code{provider}, \code{model}, \code{timeout}, \code{retry_budget}, and positive \code{max_retries}
 are rejected. \code{rate_limit} controls admission between evaluations.}
+
+\item{fallback}{Optional \code{\link[=jev_fallback]{jev_fallback()}} applied to every request; see
+\code{\link[=jev_ask]{jev_ask()}}. It is part of each state's \code{execution_id}. Cannot be combined
+with \code{backend}.}
 }
 \value{
 A \code{jev_result_set} preserving input order and IDs.
