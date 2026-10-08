@@ -7,7 +7,7 @@
 jev_map(
   states,
   questions,
-  provider = c("typesafe", "openrouter"),
+  provider = c("typesafe", "openrouter", "vercel", "pydantic", "openrouter_decisions"),
   model = NULL,
   concurrency = 4L,
   timeout = 30,
@@ -25,7 +25,9 @@ supplies durable state IDs; unnamed inputs receive positional IDs.}
 
 \item{questions}{A named list of questions or a \code{jev_spec()} object.}
 
-\item{provider}{Provider to use.}
+\item{provider}{Provider to use: a preset name (\code{"typesafe"},
+\code{"openrouter"}, \code{"vercel"}, \code{"pydantic"}, or the legacy
+\code{"openrouter_decisions"}) or a \code{\link[=jev_endpoint]{jev_endpoint()}} object.}
 
 \item{model}{Requested model, or the provider default when \code{NULL}.}
 

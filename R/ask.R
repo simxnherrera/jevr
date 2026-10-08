@@ -27,23 +27,26 @@ jev_build_provider_request <- function(
   rate_limit = NULL
 ) {
   questions <- jev_questions_value(questions)
+  provider <- jev_resolve_provider(provider)
 
-  switch(
-    provider,
-    typesafe = jev_build_typesafe_request(
+  if (identical(provider$protocol, "decisions")) {
+    return(jev_build_openrouter_request(
       state = state,
       questions = questions,
       model = model,
       timeout = timeout,
-      rate_limit = rate_limit
-    ),
-    openrouter = jev_build_openrouter_request(
-      state = state,
-      questions = questions,
-      model = model,
-      timeout = timeout,
-      rate_limit = rate_limit
-    )
+      rate_limit = rate_limit,
+      endpoint = provider
+    ))
+  }
+
+  jev_build_systemone_request(
+    state = state,
+    questions = questions,
+    model = model,
+    timeout = timeout,
+    rate_limit = rate_limit,
+    endpoint = provider
   )
 }
 
@@ -80,10 +83,14 @@ jev_validate_request_options <- function(timeout, max_retries) {
 #' @param questions A non-empty named list of questions created with
 #'   jev_choice(), jev_score(), or jev_noul(), or a `jev_spec()` object. The
 #'   names become answer IDs.
-#' @param provider Provider to use: "typesafe" for the direct TypeSafe API or
-#'   "openrouter" for OpenRouter's Decisions endpoint.
-#' @param model Model name. Defaults to the stable jev-latest alias for
-#'   TypeSafe and ~typesafe/jev-latest for OpenRouter.
+#' @param provider Provider to use: a preset name or a [jev_endpoint()] object.
+#'   Presets are `"typesafe"` (direct TypeSafe API), `"openrouter"` (OpenRouter's
+#'   native System One endpoint), `"vercel"` (Vercel AI Gateway), `"pydantic"`
+#'   (Pydantic AI Gateway), and the legacy `"openrouter_decisions"` (OpenRouter's
+#'   alpha Decisions endpoint). A custom [jev_endpoint()] is used as given.
+#' @param model Model name. Defaults to the endpoint's model: `jev-latest` for
+#'   TypeSafe and Pydantic, `~typesafe/jev-latest` for OpenRouter, and
+#'   `typesafe-ai/jev` for Vercel.
 #' @param timeout Maximum time in seconds for each HTTP attempt.
 #' @param max_retries Number of retries after the first failed or transient
 #'   response. Retries use exponential backoff and honor Retry-After.
@@ -131,7 +138,7 @@ jev_validate_request_options <- function(timeout, max_retries) {
 jev_ask <- function(
   state,
   questions,
-  provider = c("typesafe", "openrouter"),
+  provider = c("typesafe", "openrouter", "vercel", "pydantic", "openrouter_decisions"),
   model = NULL,
   timeout = 30,
   max_retries = 3,
@@ -151,7 +158,8 @@ jev_ask <- function(
     result$metadata$state_hash <- jev_state_hash(state)
     return(result)
   }
-  provider <- match.arg(provider)
+  if (!inherits(provider, "jev_endpoint")) provider <- match.arg(provider)
+  provider <- jev_resolve_provider(provider)
   state <- jev_validate_state(state)
   questions <- jev_questions_value(questions)
   questions <- jev_validate_questions(questions)
@@ -171,6 +179,7 @@ jev_ask <- function(
 
   jev_preflight_ask(state, questions)
 
+  provider_name <- jev_provider_name(provider)
   provider_request <- jev_build_provider_request(
     provider = provider,
     state = state,
@@ -180,19 +189,19 @@ jev_ask <- function(
   )
   response <- jev_send_request(
     provider_request$request,
-    provider = provider,
+    provider = provider_name,
     max_retries = as.integer(max_retries)
   )
-  body <- jev_body_json(response, provider)
+  body <- jev_body_json(response, provider_name)
 
   result <- jev_parse_response(
     body,
-    provider,
+    provider_name,
     questions
   )
   result$metadata <- utils::modifyList(
     result$metadata,
-    jev_response_metadata(response, provider)
+    jev_response_metadata(response, provider_name)
   )
   result
 }

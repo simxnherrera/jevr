@@ -4,6 +4,7 @@ reference:
   - title: Decision execution
     contents:
       - jev_ask
+      - jev_endpoint
       - jev_llm
       - jev_map
       - jev_spec

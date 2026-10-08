@@ -170,6 +170,7 @@ jev_execute_map <- function(
   response_timing = httr2::resp_timing,
   delivered = integer()
 ) {
+  provider_name <- jev_provider_name(provider)
   requests <- jev_empty_attempt_ledger()
   pending <- which(vapply(items, function(item) item$status == "pending", logical(1)))
   run_status <- "completed"
@@ -366,7 +367,7 @@ jev_execute_map <- function(
           usage <- list()
 
           if (inherits(response, "httr2_response")) {
-            http_metadata <- jev_response_metadata(response, provider)
+            http_metadata <- jev_response_metadata(response, provider_name)
             request_id <- if (is.null(http_metadata$request_id)) {
               NA_character_
             } else {
@@ -375,7 +376,7 @@ jev_execute_map <- function(
             status <- httr2::resp_status(response)
             if (status >= 200L && status < 300L) {
               body <- tryCatch(
-                jev_body_json(response, provider),
+                jev_body_json(response, provider_name),
                 error = identity
               )
               if (inherits(body, "condition")) {
@@ -383,7 +384,7 @@ jev_execute_map <- function(
                 outcome <- "parse_error"
               } else {
                 parsed <- tryCatch(
-                  jev_parse_response_partial(body, provider, questions),
+                  jev_parse_response_partial(body, provider_name, questions),
                   error = identity
                 )
                 if (inherits(parsed, "condition")) {
@@ -414,7 +415,7 @@ jev_execute_map <- function(
                 error = function(error) NULL
               )
               error <- tryCatch(
-                jev_http_error(status, provider, body, item$attempts),
+                jev_http_error(status, provider_name, body, item$attempts),
                 error = identity
               )
               outcome <- "http_error"
