@@ -5,6 +5,7 @@ reference:
     contents:
       - jev_ask
       - jev_endpoint
+      - jev_models
       - jev_llm
       - jev_map
       - jev_spec
