@@ -104,6 +104,15 @@ jev_validate_request_options <- function(timeout, max_retries) {
 #' OPENROUTER_API_KEY for OpenRouter. Keys are read at request time and are
 #' never stored in the returned object.
 #'
+#' @section Request limits:
+#' Choice questions are limited to 255 options and Score questions to 2-10
+#' levels; violations are input errors. System One also documents 64k tokens
+#' per request and 32k tokens for the state plus the longest question. Before
+#' sending, jevr estimates size from the serialized JSON (characters / 4, an
+#' approximation) and emits a warning of class `jev_preflight_warning` if a
+#' limit looks exceeded; the request is still sent. Disable with
+#' `options(jevr.preflight = FALSE)`.
+#'
 #' @section Errors:
 #' Input errors are raised before any request. HTTP, authentication, transport,
 #' JSON, and response-shape failures use classes beginning with jev_ and
@@ -159,6 +168,8 @@ jev_ask <- function(
       class = "jev_input_error"
     )
   }
+
+  jev_preflight_ask(state, questions)
 
   provider_request <- jev_build_provider_request(
     provider = provider,

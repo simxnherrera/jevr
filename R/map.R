@@ -261,6 +261,13 @@ jev_map_summary <- function(items, requests, started_at, finished_at) {
 #' counts these calls separately from native HTTP attempts. Interrupts retain
 #' completed results and cancel remaining evaluations. Callback failures stop
 #' admission and leave remaining states `not_started`.
+#'
+#' Before execution, states whose estimated request size (serialized JSON
+#' characters / 4, approximate) exceeds the documented 64k-token request or
+#' 32k-token state plus longest question limits trigger a single aggregated
+#' warning of class `jev_preflight_warning` listing the affected state IDs
+#' (also in the condition's `state_ids`). Requests are still sent. Disable
+#' with `options(jevr.preflight = FALSE)`.
 #' @export
 #' @examplesIf identical(Sys.getenv("JEVR_RUN_EXAMPLES"), "true") && nzchar(Sys.getenv("TYPESAFE_API_KEY"))
 #' states <- list(
@@ -363,6 +370,10 @@ jev_map <- function(
       run_status = "completed",
       summary = jev_map_summary(list(), jev_empty_attempt_ledger(), started_at, finished_at)
     ))
+  }
+
+  if (is.null(backend)) {
+    jev_preflight_map(items, questions)
   }
 
   valid_indices <- which(vapply(items, function(item) item$status == "pending", logical(1)))
