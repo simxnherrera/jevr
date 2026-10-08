@@ -4,7 +4,7 @@
 \alias{jev_noul}
 \title{Define a Noul question}
 \usage{
-jev_noul(instructions, criteria = NULL)
+jev_noul(instructions, criteria = NULL, ...)
 }
 \arguments{
 \item{instructions}{The yes/no question or statement to evaluate. Phrase it
@@ -12,6 +12,13 @@ so a high value means yes.}
 
 \item{criteria}{Optional named character vector or list with exactly true
 and false descriptions. Omit it when the instruction is sufficient.}
+
+\item{...}{Optional extra named fields (JSON-serializable) forwarded to
+the request body unchanged and included in the spec hash. Use them for
+question fields that newer TypeSafe API versions accept but this version
+of jevr does not model. Names must be unique and cannot be \code{type},
+\code{instructions}, or \code{criteria}. The \code{ellmer} and legacy OpenRouter
+backends ignore them.}
 }
 \value{
 An object of class jev_noul_question and jev_question.

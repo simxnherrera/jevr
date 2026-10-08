@@ -270,6 +270,14 @@ jev_result_value <- function(answer) {
     return(NULL)
   }
 
+  if (inherits(answer, "jev_unknown_answer")) {
+    return(NULL)
+  }
+
+  if (inherits(answer, "jev_unknown_answer")) {
+    return(NULL)
+  }
+
   switch(
     answer$type,
     choice = answer$choice,
@@ -305,7 +313,9 @@ jev_result_question_definitions <- function(x) {
 #' Partial states produce one row for every requested question. Valid answers
 #' have `status = "success"`; invalid or missing individual answers have
 #' `status = "error"` and their question-level error in `error_class` and
-#' `error_message`.
+#' `error_message`. Answers jevr could not interpret (an unknown answer kind,
+#' or a kind that differs from the declared question type) are kept raw in the
+#' response and appear with `status = "unknown_answer"` and empty value columns.
 #' @export
 #' @examplesIf identical(Sys.getenv("JEVR_RUN_EXAMPLES"), "true") && nzchar(Sys.getenv("TYPESAFE_API_KEY"))
 #' states <- list(
@@ -365,7 +375,9 @@ as.data.frame.jev_result_set <- function(x, row.names = NULL, optional = FALSE, 
         answer$confidence
       }
       legend[position] <- list(if (is.null(answer)) NULL else answer$legend)
-      status[[position]] <- if (!is.null(answer)) {
+      status[[position]] <- if (inherits(answer, "jev_unknown_answer")) {
+        "unknown_answer"
+      } else if (!is.null(answer)) {
         "success"
       } else if (!is.null(question_error)) {
         "error"

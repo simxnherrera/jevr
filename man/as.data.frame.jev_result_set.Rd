@@ -27,7 +27,9 @@ Convert a result set to one row per state and requested question
 Partial states produce one row for every requested question. Valid answers
 have \code{status = "success"}; invalid or missing individual answers have
 \code{status = "error"} and their question-level error in \code{error_class} and
-\code{error_message}.
+\code{error_message}. Answers jevr could not interpret (an unknown answer kind,
+or a kind that differs from the declared question type) are kept raw in the
+response and appear with \code{status = "unknown_answer"} and empty value columns.
 }
 \examples{
 \dontshow{if (identical(Sys.getenv("JEVR_RUN_EXAMPLES"), "true") && nzchar(Sys.getenv("TYPESAFE_API_KEY"))) withAutoprint(\{ # examplesIf}

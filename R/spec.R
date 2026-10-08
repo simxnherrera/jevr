@@ -54,9 +54,9 @@ jev_validate_spec_label <- function(value, argument) {
 
 jev_question_class_from_manifest <- function(question, argument) {
   if (!is.list(question) || is.null(question$type) ||
-    !identical(names(question), c("type", "instructions", "criteria"))) {
+    !jev_question_has_valid_shape(question, argument)) {
     jev_abort(
-      paste0(argument, " must contain type, instructions, and criteria."),
+      paste0(argument, " must contain type, instructions, and criteria, optionally followed by valid extra fields."),
       class = "jev_input_error"
     )
   }

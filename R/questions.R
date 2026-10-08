@@ -275,6 +275,128 @@ jev_validate_noul_criteria <- function(criteria, argument = "criteria") {
   criteria
 }
 
+jev_question_core_names <- c("type", "instructions", "criteria")
+
+# Extra named fields are forwarded to the request body unchanged (forward
+# compatibility with fields this version of jevr does not know about).
+jev_validate_question_extras <- function(extras, argument = "...") {
+  if (length(extras) == 0L) {
+    return(list())
+  }
+
+  extra_names <- names(extras)
+  if (is.null(extra_names) || anyNA(extra_names) || any(!nzchar(extra_names))) {
+    jev_abort(
+      paste0("All extra question fields in ", argument, " must be named."),
+      class = "jev_input_error"
+    )
+  }
+
+  if (anyDuplicated(extra_names)) {
+    jev_abort(
+      paste0("Extra question fields in ", argument, " must have unique names."),
+      class = "jev_input_error"
+    )
+  }
+
+  reserved <- intersect(extra_names, jev_question_core_names)
+  if (length(reserved) > 0L) {
+    jev_abort(
+      paste0(
+        "Extra question fields cannot reuse reserved names: ",
+        paste(reserved, collapse = ", "), "."
+      ),
+      class = "jev_input_error"
+    )
+  }
+
+  for (name in extra_names) {
+    jev_validate_json_value(extras[[name]], paste0(argument, "$", name))
+  }
+
+  as.list(extras)
+}
+
+# TRUE when `question` has the core fields first, followed only by valid extras.
+jev_question_has_valid_shape <- function(question, argument = "question") {
+  question_names <- names(question)
+  if (length(question_names) < 3L ||
+    !identical(question_names[1:3], jev_question_core_names)) {
+    return(FALSE)
+  }
+
+  extras <- question[-(1:3)]
+  if (length(extras) == 0L) {
+    return(TRUE)
+  }
+  result <- tryCatch(
+    jev_validate_question_extras(unclass(extras), argument),
+    jev_input_error = function(error) NULL
+  )
+  !is.null(result)
+}
+
+jev_question_core_names <- c("type", "instructions", "criteria")
+
+# Extra named fields are forwarded to the request body unchanged (forward
+# compatibility with fields this version of jevr does not know about).
+jev_validate_question_extras <- function(extras, argument = "...") {
+  if (length(extras) == 0L) {
+    return(list())
+  }
+
+  extra_names <- names(extras)
+  if (is.null(extra_names) || anyNA(extra_names) || any(!nzchar(extra_names))) {
+    jev_abort(
+      paste0("All extra question fields in ", argument, " must be named."),
+      class = "jev_input_error"
+    )
+  }
+
+  if (anyDuplicated(extra_names)) {
+    jev_abort(
+      paste0("Extra question fields in ", argument, " must have unique names."),
+      class = "jev_input_error"
+    )
+  }
+
+  reserved <- intersect(extra_names, jev_question_core_names)
+  if (length(reserved) > 0L) {
+    jev_abort(
+      paste0(
+        "Extra question fields cannot reuse reserved names: ",
+        paste(reserved, collapse = ", "), "."
+      ),
+      class = "jev_input_error"
+    )
+  }
+
+  for (name in extra_names) {
+    jev_validate_json_value(extras[[name]], paste0(argument, "$", name))
+  }
+
+  as.list(extras)
+}
+
+# TRUE when `question` has the core fields first, followed only by valid extras.
+jev_question_has_valid_shape <- function(question, argument = "question") {
+  question_names <- names(question)
+  if (length(question_names) < 3L ||
+    !identical(question_names[1:3], jev_question_core_names)) {
+    return(FALSE)
+  }
+
+  extras <- question[-(1:3)]
+  if (length(extras) == 0L) {
+    return(TRUE)
+  }
+  result <- tryCatch(
+    jev_validate_question_extras(unclass(extras), argument),
+    jev_input_error = function(error) NULL
+  )
+  !is.null(result)
+}
+
 jev_validate_questions <- function(questions) {
   if (!is.list(questions) || length(questions) == 0L) {
     jev_abort(
@@ -304,7 +426,7 @@ jev_validate_questions <- function(questions) {
     argument <- paste0("questions$", id)
 
     if (typeof(question) != "list" ||
-      !identical(names(question), c("type", "instructions", "criteria")) ||
+      !jev_question_has_valid_shape(question, argument) ||
       !inherits(question, "jev_question")) {
       jev_abort(
         paste0(
@@ -409,6 +531,20 @@ jev_validate_questions <- function(questions) {
 #'   to an optional description. Use NULL for an option that needs no extra
 #'   description.
 #'
+#' @param ... Optional extra named fields (JSON-serializable) forwarded to
+#'   the request body unchanged and included in the spec hash. Use them for
+#'   question fields that newer TypeSafe API versions accept but this version
+#'   of jevr does not model. Names must be unique and cannot be `type`,
+#'   `instructions`, or `criteria`. The `ellmer` and legacy OpenRouter
+#'   backends ignore them.
+#'
+#' @param ... Optional extra named fields (JSON-serializable) forwarded to
+#'   the request body unchanged and included in the spec hash. Use them for
+#'   question fields that newer TypeSafe API versions accept but this version
+#'   of jevr does not model. Names must be unique and cannot be `type`,
+#'   `instructions`, or `criteria`. The `ellmer` and legacy OpenRouter
+#'   backends ignore them.
+#'
 #' @return An object of class jev_choice_question and jev_question.
 #' @export
 #' @examples
@@ -420,12 +556,15 @@ jev_validate_questions <- function(questions) {
 #'     sales = "Pricing, upgrades, new accounts"
 #'   )
 #' )
-jev_choice <- function(instructions, criteria) {
+jev_choice <- function(instructions, criteria, ...) {
   structure(
-    list(
-      type = "choice",
-      instructions = jev_validate_instructions(instructions),
-      criteria = jev_validate_named_criteria(criteria, "criteria", 255L)
+    c(
+      list(
+        type = "choice",
+        instructions = jev_validate_instructions(instructions),
+        criteria = jev_validate_named_criteria(criteria, "criteria", 255L)
+      ),
+      jev_validate_question_extras(list(...))
     ),
     class = c("jev_choice_question", "jev_question")
   )
@@ -442,6 +581,20 @@ jev_choice <- function(instructions, criteria) {
 #' @param criteria An ordered character vector or list of level descriptions.
 #'   It must contain between two and ten levels, from low to high.
 #'
+#' @param ... Optional extra named fields (JSON-serializable) forwarded to
+#'   the request body unchanged and included in the spec hash. Use them for
+#'   question fields that newer TypeSafe API versions accept but this version
+#'   of jevr does not model. Names must be unique and cannot be `type`,
+#'   `instructions`, or `criteria`. The `ellmer` and legacy OpenRouter
+#'   backends ignore them.
+#'
+#' @param ... Optional extra named fields (JSON-serializable) forwarded to
+#'   the request body unchanged and included in the spec hash. Use them for
+#'   question fields that newer TypeSafe API versions accept but this version
+#'   of jevr does not model. Names must be unique and cannot be `type`,
+#'   `instructions`, or `criteria`. The `ellmer` and legacy OpenRouter
+#'   backends ignore them.
+#'
 #' @return An object of class jev_score_question and jev_question.
 #' @export
 #' @examples
@@ -453,12 +606,15 @@ jev_choice <- function(instructions, criteria) {
 #'     "Blocking; no workaround exists"
 #'   )
 #' )
-jev_score <- function(instructions, criteria) {
+jev_score <- function(instructions, criteria, ...) {
   structure(
-    list(
-      type = "score",
-      instructions = jev_validate_instructions(instructions),
-      criteria = jev_validate_score_criteria(criteria)
+    c(
+      list(
+        type = "score",
+        instructions = jev_validate_instructions(instructions),
+        criteria = jev_validate_score_criteria(criteria)
+      ),
+      jev_validate_question_extras(list(...))
     ),
     class = c("jev_score_question", "jev_question")
   )
@@ -474,6 +630,20 @@ jev_score <- function(instructions, criteria) {
 #' @param criteria Optional named character vector or list with exactly true
 #'   and false descriptions. Omit it when the instruction is sufficient.
 #'
+#' @param ... Optional extra named fields (JSON-serializable) forwarded to
+#'   the request body unchanged and included in the spec hash. Use them for
+#'   question fields that newer TypeSafe API versions accept but this version
+#'   of jevr does not model. Names must be unique and cannot be `type`,
+#'   `instructions`, or `criteria`. The `ellmer` and legacy OpenRouter
+#'   backends ignore them.
+#'
+#' @param ... Optional extra named fields (JSON-serializable) forwarded to
+#'   the request body unchanged and included in the spec hash. Use them for
+#'   question fields that newer TypeSafe API versions accept but this version
+#'   of jevr does not model. Names must be unique and cannot be `type`,
+#'   `instructions`, or `criteria`. The `ellmer` and legacy OpenRouter
+#'   backends ignore them.
+#'
 #' @return An object of class jev_noul_question and jev_question.
 #' @export
 #' @examples
@@ -481,12 +651,15 @@ jev_score <- function(instructions, criteria) {
 #'   instructions = "Does this request convey urgency?",
 #'   criteria = c(true = "Explicitly time-sensitive", false = "No urgency")
 #' )
-jev_noul <- function(instructions, criteria = NULL) {
+jev_noul <- function(instructions, criteria = NULL, ...) {
   structure(
-    list(
-      type = "noul",
-      instructions = jev_validate_instructions(instructions),
-      criteria = jev_validate_noul_criteria(criteria)
+    c(
+      list(
+        type = "noul",
+        instructions = jev_validate_instructions(instructions),
+        criteria = jev_validate_noul_criteria(criteria)
+      ),
+      jev_validate_question_extras(list(...))
     ),
     class = c("jev_noul_question", "jev_question")
   )
