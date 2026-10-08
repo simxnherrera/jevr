@@ -168,7 +168,8 @@ jev_execute_map <- function(
   now = jev_executor_now,
   random = stats::runif,
   response_timing = httr2::resp_timing,
-  delivered = integer()
+  delivered = integer(),
+  fallback = NULL
 ) {
   provider_name <- jev_provider_name(provider)
   requests <- jev_empty_attempt_ledger()
@@ -246,7 +247,8 @@ jev_execute_map <- function(
           questions = questions,
           model = model,
           timeout = min(timeout, remaining),
-          rate_limit = rate_limit
+          rate_limit = rate_limit,
+          fallback = fallback
         ),
         error = identity
       )

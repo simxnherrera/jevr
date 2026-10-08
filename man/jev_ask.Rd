@@ -11,7 +11,8 @@ jev_ask(
   model = NULL,
   timeout = 30,
   max_retries = 3,
-  backend = NULL
+  backend = NULL,
+  fallback = NULL
 )
 }
 \arguments{
@@ -43,6 +44,11 @@ response. Retries use exponential backoff and honor Retry-After.}
 \item{backend}{Optional \code{jev_llm()} backend. Cannot be combined with explicit
 \code{provider}, \code{model}, \code{timeout}, or positive \code{max_retries}. Timeout and
 retries belong to the chat transport. Omitted native defaults do not apply.}
+
+\item{fallback}{Optional \code{\link[=jev_fallback]{jev_fallback()}} describing a Vercel AI Gateway
+decision fallback. Only endpoints with the \code{"fallback"} capability (the
+\code{"vercel"} preset) accept it; otherwise a \code{jev_input_error} is raised
+before any request. See \code{\link[=jev_fallback]{jev_fallback()}}.}
 }
 \value{
 An object of class jev_response with model, typed answers, usage,

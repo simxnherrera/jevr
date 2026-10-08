@@ -284,7 +284,11 @@ jev_response_metadata <- function(response, provider) {
     "content-length", "content-type", "date", "retry-after", "retry-after-ms",
     "server", "x-openrouter-request-id", "x-ratelimit-limit",
     "x-ratelimit-remaining", "x-ratelimit-reset", "x-ratelimit-request-id",
-    "x-request-id"
+    "x-request-id",
+    paste0("x-ai-gateway-decision-fallback-", c(
+      "triggered", "final-model", "primary-model", "triggering-questions",
+      "triggering-questions-truncated"
+    ))
   )
   headers <- headers[header_names %in% allowed_headers]
   header_names <- tolower(names(headers))
@@ -303,11 +307,14 @@ jev_response_metadata <- function(response, provider) {
     }
   }
 
-  list(
+  out <- list(
     provider = provider,
     http_status = status,
     headers = headers,
     request_id = request_id,
     timing = timing
   )
+  fallback <- jev_parse_fallback_headers(headers)
+  if (!is.null(fallback)) out$fallback <- fallback
+  out
 }

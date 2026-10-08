@@ -295,7 +295,10 @@ jev_consistency_row <- function(state_id, input_index, id, entry, answers) {
   # unanswered copies rather than failing the whole summary.
   answered <- answered[!vapply(
     answers[answered],
-    function(answer) inherits(answer, "jev_unknown_answer"),
+    function(answer) {
+      inherits(answer, "jev_unknown_answer") ||
+        isTRUE(answer$confidence_unavailable)
+    },
     logical(1)
   )]
   probabilities <- NULL

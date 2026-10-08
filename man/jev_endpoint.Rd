@@ -9,7 +9,8 @@ jev_endpoint(
   api_key_env,
   model = NULL,
   headers = list(),
-  name = NULL
+  name = NULL,
+  capabilities = character()
 )
 }
 \arguments{
@@ -25,6 +26,12 @@ explicit \code{model} in each call.}
 
 \item{name}{Short name recorded in result metadata and used in execution
 identity. Defaults to the host and path of \code{base_url}.}
+
+\item{capabilities}{Character vector of optional features the server
+supports. The only recognised value is \code{"fallback"}: the server accepts
+Vercel AI Gateway's \code{providerOptions.gateway.models} decision-fallback
+extension (see \code{\link[=jev_fallback]{jev_fallback()}}). The \code{"vercel"} preset has it; set it
+only for custom endpoints that are Vercel-compatible.}
 }
 \value{
 An object of class \code{jev_endpoint}.

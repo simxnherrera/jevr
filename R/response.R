@@ -159,6 +159,23 @@ jev_warn_unknown_answers <- function(answers) {
   warning(condition)
 }
 
+# AI Gateway reports a language-model Choice/Score fallback answer as
+# confidence 0 with empty probabilities, meaning "unavailable".
+jev_is_unavailable_sentinel <- function(answer) {
+  probabilities <- answer$probabilities
+  confidence <- answer$confidence
+  is.list(probabilities) && length(probabilities) == 0L &&
+    is.numeric(confidence) && length(confidence) == 1L &&
+    !is.na(confidence) && confidence == 0
+}
+
+jev_unavailable_probabilities <- function(option_names) {
+  if (is.null(option_names)) {
+    return(stats::setNames(numeric(0), character(0)))
+  }
+  stats::setNames(rep(NA_real_, length(option_names)), option_names)
+}
+
 jev_parse_answer <- function(
   answer, question_id, question, allow_missing_confidence = FALSE,
   probability_tolerance = 1e-6
@@ -185,6 +202,9 @@ jev_parse_answer <- function(
     return(jev_unknown_answer(answer, expected_type, reason))
   }
 
+  sentinel <- expected_type %in% c("choice", "score") &&
+    jev_is_unavailable_sentinel(answer)
+
   if (identical(expected_type, "choice")) {
     choice <- jev_required_response_field(answer, "choice", question_id)
     probabilities <- jev_required_response_field(
@@ -207,6 +227,14 @@ jev_parse_answer <- function(
 
     expected_names <- if (is.null(question$criteria)) NULL else names(question$criteria)
 
+    if (sentinel) {
+      answer$probabilities <- jev_unavailable_probabilities(expected_names)
+      answer$confidence <- NA_real_
+      answer$confidence_unavailable <- TRUE
+      class(answer) <- c("jev_choice_answer", "jev_answer", "list")
+      return(answer)
+    }
+
     answer$probabilities <- jev_validate_probability_map(
       probabilities,
       paste0(question_id, "$probabilities"),
@@ -224,7 +252,11 @@ jev_parse_answer <- function(
 
   if (identical(expected_type, "score")) {
     score <- jev_required_response_field(answer, "score", question_id)
-    legend <- jev_required_response_field(answer, "legend", question_id)
+    legend <- if (sentinel && is.null(answer$legend)) {
+      NULL
+    } else {
+      jev_required_response_field(answer, "legend", question_id)
+    }
     probabilities <- jev_required_response_field(
       answer, "probabilities", question_id
     )
@@ -240,6 +272,20 @@ jev_parse_answer <- function(
 
     expected_names <- if (is.null(question$criteria)) names(probabilities) else {
       as.character(seq_along(question$criteria) - 1L)
+    }
+    if (sentinel) {
+      if (!is.null(legend)) {
+        answer$legend <- jev_validate_legend(
+          legend, paste0(question_id, "$legend"), expected_names
+        )
+      }
+      answer$probabilities <- jev_unavailable_probabilities(
+        if (is.null(question$criteria)) NULL else expected_names
+      )
+      answer$confidence <- NA_real_
+      answer$confidence_unavailable <- TRUE
+      class(answer) <- c("jev_score_answer", "jev_answer", "list")
+      return(answer)
     }
     answer$legend <- jev_validate_legend(
       legend,

@@ -24,7 +24,8 @@ jev_build_provider_request <- function(
   questions,
   model,
   timeout,
-  rate_limit = NULL
+  rate_limit = NULL,
+  fallback = NULL
 ) {
   questions <- jev_questions_value(questions)
   provider <- jev_resolve_provider(provider)
@@ -46,7 +47,8 @@ jev_build_provider_request <- function(
     model = model,
     timeout = timeout,
     rate_limit = rate_limit,
-    endpoint = provider
+    endpoint = provider,
+    fallback = fallback
   )
 }
 
@@ -96,6 +98,10 @@ jev_validate_request_options <- function(timeout, max_retries) {
 #' @param timeout Maximum time in seconds for each HTTP attempt.
 #' @param max_retries Number of retries after the first failed or transient
 #'   response. Retries use exponential backoff and honor Retry-After.
+#' @param fallback Optional [jev_fallback()] describing a Vercel AI Gateway
+#'   decision fallback. Only endpoints with the `"fallback"` capability (the
+#'   `"vercel"` preset) accept it; otherwise a `jev_input_error` is raised
+#'   before any request. See [jev_fallback()].
 #' @param backend Optional `jev_llm()` backend. Cannot be combined with explicit
 #'   `provider`, `model`, `timeout`, or positive `max_retries`. Timeout and
 #'   retries belong to the chat transport. Omitted native defaults do not apply.
@@ -149,10 +155,14 @@ jev_ask <- function(
   model = NULL,
   timeout = 30,
   max_retries = 3,
-  backend = NULL
+  backend = NULL,
+  fallback = NULL
 ) {
   definition <- questions
   if (!is.null(backend)) {
+    if (!is.null(fallback)) {
+      jev_abort("fallback cannot be combined with an ellmer backend.", class = "jev_input_error")
+    }
     jev_validate_llm_options(
       backend, !missing(provider), !missing(model),
       !missing(timeout), if (missing(max_retries)) 0 else max_retries
@@ -184,6 +194,7 @@ jev_ask <- function(
     )
   }
 
+  jev_validate_fallback(fallback, questions, provider, model)
   jev_preflight_ask(state, questions)
 
   provider_name <- jev_provider_name(provider)
@@ -192,7 +203,8 @@ jev_ask <- function(
     state = state,
     questions = questions,
     model = model,
-    timeout = timeout
+    timeout = timeout,
+    fallback = fallback
   )
   response <- jev_send_request(
     provider_request$request,
