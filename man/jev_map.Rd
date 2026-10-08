@@ -78,6 +78,15 @@ counts these calls separately from native HTTP attempts. Interrupts retain
 completed results and cancel remaining evaluations. Callback failures stop
 admission and leave remaining states \code{not_started}.
 
+Every result records \code{requested_model}, \code{answered_model} (the versioned
+model the server reported) and \code{is_alias} in its \code{provenance}. Execution ids
+are computed before sending, so they use the requested model only: two runs
+with \code{jev-latest} share ids even if different model versions answered, and
+alias-based results should not be reused across sessions. If more than one
+distinct answered model appears in a run, one warning of class
+\code{jev_model_drift_warning} is signalled (distinct models in the condition's
+\code{models}); \code{summary()$answered_models} lists the models seen.
+
 Before execution, states whose estimated request size (serialized JSON
 characters / 4, approximate) exceeds the documented 64k-token request or
 32k-token state plus longest question limits trigger a single aggregated

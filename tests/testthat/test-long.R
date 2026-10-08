@@ -23,8 +23,8 @@ test_that("long format has one row per option and sums to one", {
   long <- as.data.frame(response)
   expect_named(long, c(
     "state_id", "question_id", "type", "option", "probability", "selected",
-    "confidence", "score", "noul", "model", "status", "error_class",
-    "error_message"
+    "confidence", "score", "noul", "model", "requested_model", "status",
+    "error_class", "error_message"
   ))
   expect_equal(nrow(long), 7L)
   expect_true(all(is.na(long$state_id)))

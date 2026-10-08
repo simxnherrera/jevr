@@ -10,6 +10,7 @@ jev_long_empty <- function() {
     score = numeric(),
     noul = numeric(),
     model = character(),
+    requested_model = character(),
     status = character(),
     error_class = character(),
     error_message = character(),
@@ -19,7 +20,8 @@ jev_long_empty <- function() {
 
 # One question's rows. `answer` NULL (failed/missing) yields a single NA row.
 jev_long_question_rows <- function(
-  state_id, question_id, type, answer, model, status, error
+  state_id, question_id, type, answer, model, status, error,
+  requested_model = NULL
 ) {
   na_chr <- NA_character_
   na_num <- NA_real_
@@ -70,6 +72,10 @@ jev_long_question_rows <- function(
     score = rep_len(score, n),
     noul = rep_len(noul, n),
     model = rep(if (is.null(model)) na_chr else as.character(model), n),
+    requested_model = rep(
+      if (is.null(requested_model)) na_chr else as.character(requested_model),
+      n
+    ),
     status = rep(status, n),
     error_class = rep(if (is.null(error)) na_chr else error$class, n),
     error_message = rep(if (is.null(error)) na_chr else error$message, n),
@@ -117,7 +123,8 @@ jev_long_result <- function(x, questions = NULL) {
     type <- if (!is.null(questions)) questions[[id]]$type else NULL
     jev_long_question_rows(
       x$state_id, id, type, answer, model, status,
-      if (is.null(answer)) error else NULL
+      if (is.null(answer)) error else NULL,
+      requested_model = x$provenance$requested_model
     )
   })
   jev_long_bind(rows)
@@ -151,7 +158,7 @@ jev_long_reject_wide <- function(format) {
 #' @param ... Unused arguments.
 #' @return A data frame with columns `state_id`, `question_id`, `type`,
 #'   `option`, `probability`, `selected`, `confidence`, `score`, `noul`,
-#'   `model`, `status`, `error_class`, and `error_message`.
+#'   `model` (the versioned model that answered), `requested_model`, `status`, `error_class`, and `error_message`.
 #' @details
 #' Choice and score rows carry the answer's probability for each option or
 #' level; probabilities per question sum to 1. For choice, `selected` marks

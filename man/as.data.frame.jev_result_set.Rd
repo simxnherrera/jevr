@@ -26,7 +26,10 @@
 \item{...}{Unused arguments.}
 }
 \value{
-A data frame with one row per state-question pair. \code{value},
+A data frame with one row per state-question pair, including
+\code{requested_model}, \code{answered_model} (the versioned model the server
+reported, \code{NA} when no response) and \code{is_alias} (whether the requested
+model is a moving alias such as \code{jev-latest}). \code{value},
 \code{probabilities}, and \code{legend} remain list-columns; provenance and error
 fields are returned as scalar columns.
 }

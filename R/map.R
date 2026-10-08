@@ -115,7 +115,9 @@ jev_map_item <- function(
     execution_id = NA_character_,
     state_id_durable = durable_id,
     provider = provider,
-    requested_model = model
+    requested_model = model,
+    answered_model = NA_character_,
+    is_alias = if (is.null(backend)) jev_model_is_alias(model) else NA
   )
 
   if (!is.null(backend)) {
@@ -161,6 +163,7 @@ jev_map_item <- function(
 }
 
 jev_map_as_result <- function(item) {
+  item$provenance["answered_model"] <- list(jev_answered_model(item$response))
   jev_result(
     state_id = item$state_id,
     input_index = item$input_index,
@@ -178,8 +181,14 @@ jev_map_summary <- function(items, requests, started_at, finished_at) {
   statuses <- vapply(items, function(item) item$status, character(1))
   attempts <- if (nrow(requests) == 0L) integer() else requests$attempt
   http_requests <- requests[requests$provider != "ellmer", , drop = FALSE]
+  answered <- vapply(
+    items,
+    function(item) jev_answered_model(item$response),
+    character(1)
+  )
   list(
     states = length(items),
+    answered_models = sort(unique(answered[!is.na(answered)])),
     successes = sum(statuses == "success"),
     failures = sum(statuses %in% c(
       "error", "transport_error", "invalid_input", "cancelled"
@@ -263,6 +272,15 @@ jev_map_summary <- function(items, requests, started_at, finished_at) {
 #' counts these calls separately from native HTTP attempts. Interrupts retain
 #' completed results and cancel remaining evaluations. Callback failures stop
 #' admission and leave remaining states `not_started`.
+#'
+#' Every result records `requested_model`, `answered_model` (the versioned
+#' model the server reported) and `is_alias` in its `provenance`. Execution ids
+#' are computed before sending, so they use the requested model only: two runs
+#' with `jev-latest` share ids even if different model versions answered, and
+#' alias-based results should not be reused across sessions. If more than one
+#' distinct answered model appears in a run, one warning of class
+#' `jev_model_drift_warning` is signalled (distinct models in the condition's
+#' `models`); `summary()$answered_models` lists the models seen.
 #'
 #' Before execution, states whose estimated request size (serialized JSON
 #' characters / 4, approximate) exceeds the documented 64k-token request or
@@ -447,6 +465,7 @@ jev_map <- function(
   finished_at <- jev_executor_now()
   results <- lapply(items, jev_map_as_result)
   names(results) <- state_input$ids
+  jev_warn_model_drift(results)
   run_status <- execution$run_status
   if (!is.null(callback_error)) {
     run_status <- "callback_error"
