@@ -5,6 +5,7 @@
   - [Basic usage](#basic-usage)
   - [Question types](#question-types)
   - [Providers](#providers)
+  - [Listing models](#listing-models)
   - [Versioned specifications and multiple
     states](#versioned-specifications-and-multiple-states)
   - [Response object](#response-object)
@@ -192,10 +193,10 @@ result <- jev_ask(
 )
 ```
 
-It uses OpenRouter's native System One endpoint (`/api/v1/systemone`) with
-`~typesafe/jev-latest` by default and authenticates with `OPENROUTER_API_KEY`.
-The older alpha Decisions endpoint remains available as
-`provider = "openrouter_decisions"`.
+It uses OpenRouter’s native System One endpoint (`/api/v1/systemone`)
+with `~typesafe/jev-latest` by default and authenticates with
+`OPENROUTER_API_KEY`. The older alpha Decisions endpoint remains
+available as `provider = "openrouter_decisions"`.
 
 ### Other gateways and custom endpoints
 
@@ -318,6 +319,20 @@ requires `JEVR_RUN_ELLMERCODEX_INTEGRATION=true` and a separately
 authenticated ellmercodex session. Enabling it uses the subscription and
 sends one evaluation with Choice, Score and Noul. It does not perform
 authentication for you.
+
+## Listing models
+
+`jev_models()` lists the models an endpoint serves (`GET /v1/models`) as
+a data frame with `name`, `description` and `release_date`. It works
+with the `"typesafe"`, `"vercel"` and `"pydantic"` presets and with
+custom `jev_endpoint()` objects. OpenRouter uses its own catalogue
+format, so `jev_models("openrouter")` raises an error pointing to
+<https://openrouter.ai/typesafe>.
+
+``` r
+jev_models()
+jev_models("vercel")
+```
 
 ## Versioned specifications and multiple states
 

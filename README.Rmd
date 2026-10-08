@@ -299,6 +299,20 @@ requires `JEVR_RUN_ELLMERCODEX_INTEGRATION=true` and a separately authenticated
 ellmercodex session. Enabling it uses the subscription and sends one evaluation
 with Choice, Score and Noul. It does not perform authentication for you.
 
+## Listing models
+
+`jev_models()` lists the models an endpoint serves (`GET /v1/models`) as a
+data frame with `name`, `description` and `release_date`. It works with the
+`"typesafe"`, `"vercel"` and `"pydantic"` presets and with custom
+`jev_endpoint()` objects. OpenRouter uses its own catalogue format, so
+`jev_models("openrouter")` raises an error pointing to
+<https://openrouter.ai/typesafe>.
+
+```{r, eval=FALSE}
+jev_models()
+jev_models("vercel")
+```
+
 ## Versioned specifications and multiple states
 
 Use `jev_spec()` when a definition must be identified and compared over time:
