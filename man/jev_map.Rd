@@ -75,6 +75,13 @@ and internal transport attempts are unknown. \code{summary()$llm_invocations}
 counts these calls separately from native HTTP attempts. Interrupts retain
 completed results and cancel remaining evaluations. Callback failures stop
 admission and leave remaining states \code{not_started}.
+
+Before execution, states whose estimated request size (serialized JSON
+characters / 4, approximate) exceeds the documented 64k-token request or
+32k-token state plus longest question limits trigger a single aggregated
+warning of class \code{jev_preflight_warning} listing the affected state IDs
+(also in the condition's \code{state_ids}). Requests are still sent. Disable
+with \code{options(jevr.preflight = FALSE)}.
 }
 \examples{
 \dontshow{if (identical(Sys.getenv("JEVR_RUN_EXAMPLES"), "true") && nzchar(Sys.getenv("TYPESAFE_API_KEY"))) withAutoprint(\{ # examplesIf}
