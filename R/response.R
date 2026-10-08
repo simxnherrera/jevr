@@ -331,6 +331,39 @@ jev_response_question_definitions <- function(questions) {
   list(ids = question_ids, definitions = question_definitions)
 }
 
+jev_gateway_metadata <- function(provider_metadata) {
+  gateway <- if (is.list(provider_metadata)) provider_metadata$gateway else NULL
+  if (is.list(gateway)) gateway else list()
+}
+
+jev_nonempty_string <- function(value) {
+  if (is.character(value) && length(value) == 1L && !is.na(value) &&
+    nzchar(value)) {
+    value
+  } else {
+    NULL
+  }
+}
+
+# One numeric cost per response (USD). Prefers `usage.cost` (OpenRouter), then
+# `provider_metadata.gateway.cost` (Vercel AI Gateway, a string). Anything
+# unparseable, negative or non-finite becomes NA; this never errors.
+jev_parse_cost <- function(value) {
+  if (is.null(value) || length(value) != 1L || is.list(value)) {
+    return(NA_real_)
+  }
+  parsed <- suppressWarnings(
+    if (is.character(value)) as.numeric(trimws(value)) else as.numeric(value)
+  )
+  if (is.na(parsed) || !is.finite(parsed) || parsed < 0) NA_real_ else parsed
+}
+
+jev_normalize_cost <- function(usage_cost, gateway_cost) {
+  cost <- jev_parse_cost(usage_cost)
+  if (is.na(cost)) cost <- jev_parse_cost(gateway_cost)
+  cost
+}
+
 jev_validate_response_envelope <- function(
   body,
   provider,
@@ -420,6 +453,21 @@ jev_validate_response_envelope <- function(
   } else {
     list(provider_metadata = body$metadata)
   }
+  if (!is.null(body$provider_metadata)) {
+    metadata$provider_metadata <- body$provider_metadata
+  }
+  gateway <- jev_gateway_metadata(body$provider_metadata)
+  routing <- gateway$routing
+  if (!is.list(routing)) routing <- list()
+  final_provider <- jev_nonempty_string(routing$finalProvider)
+  if (is.null(final_provider)) final_provider <- jev_nonempty_string(routing$final_provider)
+  generation_id <- jev_nonempty_string(gateway$generationId)
+  if (is.null(generation_id)) generation_id <- jev_nonempty_string(gateway$generation_id)
+  metadata$final_provider <- final_provider
+  metadata$generation_id <- generation_id
+  cost <- jev_normalize_cost(usage$cost, gateway$cost)
+  # Keep `usage$cost` absent (rather than NA) when unknown or invalid.
+  usage$cost <- if (is.na(cost)) NULL else cost
   metadata$provider <- provider
   metadata$id <- if (is.null(body$id)) NULL else body$id
   metadata$upstream_provider <- if (is.null(body$provider)) NULL else body$provider
