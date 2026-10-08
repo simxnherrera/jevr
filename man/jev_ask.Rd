@@ -46,7 +46,12 @@ retries belong to the chat transport. Omitted native defaults do not apply.}
 }
 \value{
 An object of class jev_response with model, typed answers, usage,
-provider metadata, and the unmodified response in raw. With an ellmer
+provider metadata, and the unmodified response in raw. \code{usage$cost} is the
+normalized USD cost (\code{usage.cost}, else Vercel
+\code{provider_metadata.gateway.cost}; omitted when absent or invalid; the map ledger records \code{NA}).
+\code{metadata$provider_metadata} keeps gateway metadata verbatim, with
+\code{metadata$final_provider} and \code{metadata$generation_id} when present; \code{metadata$requested_model} is the
+model asked for. With an ellmer
 backend, raw is the received structured object; answers are the validated
 jevr representation with locally calculated decisions.
 }

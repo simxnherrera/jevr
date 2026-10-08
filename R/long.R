@@ -96,7 +96,8 @@ jev_long_response <- function(response, state_id = NA_character_) {
   rows <- lapply(names(response$answers), function(id) {
     answer <- response$answers[[id]]
     jev_long_question_rows(
-      state_id, id, answer$type, answer, response$model, "success", NULL
+      state_id, id, answer$type, answer, response$model, "success", NULL,
+      requested_model = response$metadata$requested_model
     )
   })
   jev_long_bind(rows)
