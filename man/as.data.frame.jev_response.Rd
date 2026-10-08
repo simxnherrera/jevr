@@ -31,11 +31,16 @@ row per state, question, and option (choice), level (score), or truth value
 }
 \details{
 Choice and score rows carry the answer's probability for each option or
-level; probabilities per question sum to 1. \code{selected} marks the chosen
-option or the level equal to the score. Noul questions yield the options
-\code{"true"} and \code{"false"} with probabilities \code{noul} and \code{1 - noul}; \code{selected}
-marks the more probable one (ties select \code{"true"}). \code{confidence} is NA for
-noul, \code{score} is NA for non-score questions, and \code{noul} is NA for other
+level; probabilities per question sum to 1. For choice, \code{selected} marks
+the chosen option. For score, the \code{score} column is the probability-weighted
+expectation (it can be fractional) while \code{selected} marks the mode, the
+highest-probability level (all levels are marked on exact ties). Noul
+questions yield the options \code{"true"} and \code{"false"} with probabilities
+\code{noul} and \code{1 - noul}; \code{selected} is \code{NA} because jevr never chooses a
+threshold, so callers apply their own (for example with \code{jev_band()}).
+Answers of an unrecognised type produce one NA row with
+\code{status = "unknown_type"}. \code{confidence} is NA for noul, \code{score} is NA for
+non-score questions, and \code{noul} is NA for other
 questions. Failed or missing questions produce a single row with \code{NA}
 option, probability, and selected values, the state status (or \code{"error"}
 for a question-level error), and the error class and message. \code{state_id}

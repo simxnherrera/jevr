@@ -35,9 +35,9 @@ jev_long_question_rows <- function(
     if (identical(type, "noul")) {
       options <- c("true", "false")
       probability <- c(answer$noul, 1 - answer$noul)
-      selected <- c(answer$noul >= 0.5, answer$noul < 0.5)
+      selected <- c(NA, NA)
       noul <- answer$noul
-    } else if (type %in% c("choice", "score")) {
+    } else if (isTRUE(type %in% c("choice", "score"))) {
       probs <- answer$probabilities
       options <- names(probs)
       probability <- unname(as.numeric(probs))
@@ -46,8 +46,10 @@ jev_long_question_rows <- function(
         selected <- options == answer$choice
       } else {
         score <- as.numeric(answer$score)
-        selected <- suppressWarnings(as.numeric(options)) == score
+        selected <- probability == max(probability)
       }
+    } else {
+      status <- "unknown_answer"
     }
   }
 
@@ -147,11 +149,16 @@ jev_long_reject_wide <- function(format) {
 #'   `model`, `status`, `error_class`, and `error_message`.
 #' @details
 #' Choice and score rows carry the answer's probability for each option or
-#' level; probabilities per question sum to 1. `selected` marks the chosen
-#' option or the level equal to the score. Noul questions yield the options
-#' `"true"` and `"false"` with probabilities `noul` and `1 - noul`; `selected`
-#' marks the more probable one (ties select `"true"`). `confidence` is NA for
-#' noul, `score` is NA for non-score questions, and `noul` is NA for other
+#' level; probabilities per question sum to 1. For choice, `selected` marks
+#' the chosen option. For score, the `score` column is the probability-weighted
+#' expectation (it can be fractional) while `selected` marks the mode, the
+#' highest-probability level (all levels are marked on exact ties). Noul
+#' questions yield the options `"true"` and `"false"` with probabilities
+#' `noul` and `1 - noul`; `selected` is `NA` because jevr never chooses a
+#' threshold, so callers apply their own (for example with `jev_band()`).
+#' Answers of an unrecognised type produce one NA row with
+#' `status = "unknown_answer"`. `confidence` is NA for noul, `score` is NA for
+#' non-score questions, and `noul` is NA for other
 #' questions. Failed or missing questions produce a single row with `NA`
 #' option, probability, and selected values, the state status (or `"error"`
 #' for a question-level error), and the error class and message. `state_id`

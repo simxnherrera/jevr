@@ -35,6 +35,7 @@ test_that("long format has one row per option and sums to one", {
   expect_equal(long$option[long$selected & long$question_id == "c"], "yes")
   expect_equal(long$option[long$selected & long$question_id == "s"], "1")
   expect_equal(unique(long$score[long$question_id == "s"]), 1)
+  expect_true(all(is.na(long$selected[long$question_id == "n"])))
   expect_equal(unique(long$noul[long$question_id == "n"]), 0.8)
   expect_error(as.data.frame(response, format = "wide"), class = "jev_input_error")
 })
@@ -93,4 +94,26 @@ test_that("long result sets cover failed states and wide is unchanged", {
   expect_equal(long$status[3L], "failed")
   expect_true(is.na(long$probability[3L]))
   expect_false(is.na(long$error_message[3L]))
+})
+
+test_that("score selected is the mode even when the score is fractional", {
+  score <- list(
+    type = "score", score = 1.05,
+    probabilities = c("0" = 0, "1" = 0.95, "2" = 0.05), confidence = 0.9
+  )
+  tie <- list(
+    type = "score", score = 0.5,
+    probabilities = c("0" = 0.5, "1" = 0.5), confidence = 0.9
+  )
+  unknown <- list(type = "mystery")
+  response <- structure(
+    list(model = "m", answers = list(s = score, t = tie, u = unknown)),
+    class = "jev_response"
+  )
+  long <- as.data.frame(response)
+  expect_equal(long$option[long$selected %in% TRUE & long$question_id == "s"], "1")
+  expect_equal(unique(long$score[long$question_id == "s"]), 1.05)
+  expect_equal(sum(long$selected[long$question_id == "t"]), 2L)
+  expect_equal(long$status[long$question_id == "u"], "unknown_answer")
+  expect_equal(long$status[long$question_id == "s"][1L], "success")
 })
