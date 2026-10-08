@@ -1,0 +1,151 @@
+---
+title: "Composite scoring"
+---
+
+Sometimes a single number must summarize many qualities: lead quality, risk,
+candidate fit, content health. Asking one question for the overall score
+hides your policy inside a prompt. The composite pattern from the TypeSafe
+docs does the opposite: ask many small questions that each measure one thing,
+and combine them with weights in your own code. This article shows that
+workflow with jevr. Chunks are not evaluated here.
+
+```{r, eval = FALSE}
+library(jevr)
+```
+
+## Atomic Score questions
+
+Each question should measure one attribute, with levels that read from low to
+high and describe observable differences. Four to five levels is plenty.
+
+```{r, eval = FALSE}
+questions <- list(
+  budget = jev_score(
+    "How clearly does the lead indicate a budget?",
+    c(
+      "No mention of budget",
+      "Vague hints about cost sensitivity",
+      "Gives a rough range",
+      "States a concrete, approved budget"
+    )
+  ),
+  timeline = jev_score(
+    "How soon does the lead intend to buy?",
+    c(
+      "No timeline",
+      "Exploring, more than a year out",
+      "Planning within the year",
+      "Needs a solution within a month"
+    )
+  ),
+  fit = jev_score(
+    "How well does the request match what we sell?",
+    c(
+      "Unrelated to our product",
+      "Adjacent; would need custom work",
+      "Mostly a match",
+      "Exactly our core use case"
+    )
+  )
+)
+```
+
+The questions are independent: they are evaluated together against the same
+state, but one answer does not influence another.
+
+## Run once
+
+```{r, eval = FALSE}
+leads <- c(
+  lead_a = "We have 40k approved for a CRM and want to launch next month.",
+  lead_b = "Just curious how this compares to spreadsheets, no rush.",
+  lead_c = "Can you build us a custom drone fleet manager?"
+)
+
+results <- jev_map(leads, questions)
+```
+
+## Collect the components
+
+In long format a Score question's `score` is the probability-weighted
+expectation, repeated on each level row. Take it once per state and question
+and arrange it as a matrix.
+
+```{r, eval = FALSE}
+long <- as.data.frame(results, format = "long")
+long <- long[long$status == "success", ]
+
+components <- tapply(long$score, list(long$state_id, long$question_id), mean)
+components
+```
+
+The values are on the question's own scale (here 1 to 4, possibly
+fractional). Rescale each to 0 to 1 so weights are comparable:
+
+```{r, eval = FALSE}
+n_levels <- c(budget = 4, timeline = 4, fit = 4)
+unit <- sweep(components - 1, 2, (n_levels - 1)[colnames(components)], "/")
+```
+
+## Weights live in R
+
+```{r, eval = FALSE}
+composite <- function(unit, weights) {
+  weights <- weights[colnames(unit)] / sum(weights[colnames(unit)])
+  drop(unit %*% weights)
+}
+
+weights <- c(budget = 0.5, timeline = 0.2, fit = 0.3)
+priority <- composite(unit, weights)
+sort(priority, decreasing = TRUE)
+```
+
+Because the model only produced the components, changing your mind costs
+nothing. A sales-led team and a product-led team can rank the same leads
+differently, and you can try new weights as often as you like without another
+request:
+
+```{r, eval = FALSE}
+sales_led   <- c(budget = 0.6, timeline = 0.3, fit = 0.1)
+product_led <- c(budget = 0.1, timeline = 0.2, fit = 0.7)
+
+data.frame(
+  sales   = composite(unit, sales_led),
+  product = composite(unit, product_led)
+)
+```
+
+You can also add rules the model should never decide: a hard floor on `fit`,
+a bonus for a known account, a cap for leads that already churned.
+
+```{r, eval = FALSE}
+priority[unit[, "fit"] < 0.2] <- 0
+```
+
+## Keep the evidence
+
+Store the components next to the composite so a reviewer can see why a lead
+scored the way it did, and which model version produced the numbers.
+
+```{r, eval = FALSE}
+report <- data.frame(
+  lead = rownames(unit),
+  unit,
+  priority = priority,
+  model = unique(long$model)[1],
+  row.names = NULL
+)
+```
+
+If a run mixes model versions (`jev_model_drift_warning`), the components are
+not strictly comparable; re-run pinned to one versioned model. Failed states
+are absent from `components` because of the status filter, so compare
+`rownames(components)` with `names(results)` to find them.
+
+## Rules of thumb
+
+- One attribute per question; split any question that contains "and".
+- Anchor every level with something observable, not an adjective.
+- Use the same number of levels where you want to compare questions
+  directly, and rescale when you do not.
+- Keep weights, thresholds and tie-breaking in code under version control.

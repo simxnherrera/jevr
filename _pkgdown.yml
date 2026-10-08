@@ -21,3 +21,18 @@ reference:
       - jev_choice
       - jev_score
       - jev_noul
+  - title: Uncertainty and consistency
+    contents:
+      - jev_band
+      - jev_permute_choices
+      - jev_consistency
+      - as.data.frame.jev_response
+
+articles:
+  - title: Guides
+    contents:
+      - articles/endpoints-and-gateways
+      - articles/reranking
+      - articles/date-extraction
+      - articles/composite-scoring
+      - articles/consistency-and-uncertainty

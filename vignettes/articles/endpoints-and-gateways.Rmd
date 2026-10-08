@@ -1,0 +1,218 @@
+---
+title: "Endpoints and gateways"
+---
+
+The TypeSafe System One wire format (`POST <base_url>/v1/systemone`) is served
+by TypeSafe itself and by several AI gateways. jevr treats each server as an
+*endpoint*: a base URL, the name of the environment variable that holds the
+key, and a default model. None of the code below is evaluated when this site
+is built, because every call needs a network connection and an API key.
+
+```{r, eval = FALSE}
+library(jevr)
+
+questions <- list(
+  urgent = jev_noul("Does this request convey urgency?")
+)
+state <- "My payouts have been failing for three days."
+```
+
+## Presets and environment variables
+
+`provider =` accepts a preset name. Each preset reads its key from an
+environment variable when the request is built; the key is never stored in
+the endpoint or in results.
+
+| Preset | Base URL | Key variable | Default model |
+|---|---|---|---|
+| `"typesafe"` | `https://api.typesafe.ai` | `TYPESAFE_API_KEY` | `jev-latest` |
+| `"openrouter"` | `https://openrouter.ai/api` | `OPENROUTER_API_KEY` | `~typesafe/jev-latest` |
+| `"vercel"` | `https://ai-gateway.vercel.sh/typesafe` | `AI_GATEWAY_API_KEY` | `typesafe-ai/jev` |
+| `"pydantic"` | `https://gateway-us.pydantic.dev/proxy/typesafe` | `PYDANTIC_AI_GATEWAY_API_KEY` | `jev-latest` |
+
+```{r, eval = FALSE}
+Sys.setenv(OPENROUTER_API_KEY = "<your key>")  # or set it in ~/.Renviron
+
+jev_ask(state, questions, provider = "openrouter")
+```
+
+The `"typesafe"` preset also honours `TYPESAFE_BASE_URL`, which is handy for
+a staging server or a local proxy. The legacy preset
+`"openrouter_decisions"` still reaches OpenRouter's alpha Decisions endpoint;
+it is kept for compatibility, drops extra question fields, and is no longer
+the way to use OpenRouter.
+
+For any other TypeSafe-format server, describe it with `jev_endpoint()` and
+pass the object as `provider`:
+
+```{r, eval = FALSE}
+gateway <- jev_endpoint(
+  base_url = "https://gateway.example.com/typesafe",
+  api_key_env = "EXAMPLE_GATEWAY_API_KEY",
+  model = "jev-latest",
+  headers = list("X-Team" = "support"),
+  name = "example-gateway"
+)
+gateway
+
+jev_ask(state, questions, provider = gateway)
+```
+
+`base_url` must not include `/v1/systemone`, and `Authorization` cannot be
+set through `headers`; the bearer token always comes from `api_key_env`.
+
+## Listing models
+
+`jev_models()` calls `GET <base_url>/v1/models` and returns a data frame with
+`name`, `description` and `release_date`.
+
+```{r, eval = FALSE}
+jev_models()
+jev_models("vercel")
+```
+
+OpenRouter publishes its catalogue in a different shape, so asking for the
+OpenRouter presets raises a `jev_unsupported_error` before any request is
+sent. Browse <https://openrouter.ai/typesafe> instead.
+
+## Cost and routing metadata
+
+Gateways report what a request cost and where it was routed. jevr keeps both
+without interpreting them beyond a single normalized number.
+
+```{r, eval = FALSE}
+response <- jev_ask(state, questions, provider = "vercel")
+
+response$usage$cost                  # USD, normalized; absent if unreported
+response$metadata$provider_metadata  # gateway metadata, verbatim
+response$metadata$final_provider     # who actually served the request
+response$metadata$generation_id      # gateway id for support and audits
+```
+
+`usage$cost` comes from `usage.cost` (OpenRouter) or from the gateway's
+`provider_metadata` (Vercel, converted from a string to a number). For
+`jev_map()` the per-request ledger holds the same number, with `NA` where it
+was not reported, and `summary()` adds them up.
+
+```{r, eval = FALSE}
+results <- jev_map(
+  c(a = state, b = "Refund still pending."),
+  questions,
+  provider = "vercel"
+)
+summary(results)$observed_cost
+attr(results, "requests")[, c("state_id", "attempt", "cost")]
+```
+
+## Which model answered?
+
+`jev-latest` is a moving alias. Every response records both sides:
+
+```{r, eval = FALSE}
+response$metadata$requested_model  # what you asked for, e.g. "jev-latest"
+response$model                     # versioned model the server reported
+
+as.data.frame(results)[, c("state_id", "requested_model", "answered_model",
+                           "is_alias")]
+```
+
+`is_alias` is `TRUE` for moving names (`jev-latest`, `jev-preview`, OpenRouter
+`~` aliases, the unversioned Vercel `typesafe-ai/jev`). Execution ids are
+computed before sending, so they use the *requested* model only. Two runs
+with `jev-latest` therefore share ids even if different versions answered;
+do not reuse alias-based results across sessions as if they were identical.
+
+If more than one version answers inside a single `jev_map()` run, jevr warns
+with class `jev_model_drift_warning`, and `summary(results)$answered_models`
+lists everything it saw. For reproducible work, pin a versioned ID taken from
+a previous response or from `jev_models()`:
+
+```{r, eval = FALSE}
+pinned <- response$model   # a specific version string reported by the server
+results <- jev_map(c(a = state, b = "Refund still pending."), questions,
+                   model = pinned)
+
+withCallingHandlers(
+  jev_map(c(a = state, b = "Refund still pending."), questions),
+  jev_model_drift_warning = function(w) {
+    message("Drift: ", conditionMessage(w))
+    invokeRestart("muffleWarning")
+  }
+)
+```
+
+## Decision fallbacks on Vercel
+
+Vercel AI Gateway can rerun an uncertain decision with a stronger model.
+`jev_fallback()` describes the trigger and the second model; pass it as
+`fallback =`. Only endpoints with the `"fallback"` capability accept it (the
+`"vercel"` preset, or a custom endpoint created with
+`capabilities = "fallback"`); otherwise jevr raises a `jev_input_error`
+before sending anything.
+
+```{r, eval = FALSE}
+questions <- list(
+  intent = jev_choice(
+    "Which team should handle this message?",
+    c(billing = "Charges and refunds", account = "Sign-in and access")
+  ),
+  refund = jev_noul("Is the customer asking for money back?")
+)
+
+fb <- jev_fallback("openai/gpt-6-astra", "intent", confidence_below = 0.6)
+
+response <- jev_ask(
+  "I was charged twice and cannot sign in.",
+  questions,
+  provider = "vercel",
+  fallback = fb
+)
+```
+
+Conditions can be combined with `jev_when()` and the compound helpers
+`jev_when_any()`, `jev_when_all()` and `jev_when_at_least()`. Noul questions
+use `probability_between`, an inclusive band around 0.5:
+
+```{r, eval = FALSE}
+fb <- jev_fallback(
+  "openai/gpt-6-astra",
+  when = jev_when_any(
+    jev_when("intent", confidence_below = 0.6),
+    jev_when("refund", probability_between = c(0.4, 0.6))
+  ),
+  on_error = "anthropic/claude-sonnet-5"
+)
+```
+
+When the fallback runs, the gateway reruns the state with *all* questions and
+returns that complete result; answers are not merged, and both stages are
+billed (`usage$cost` is already the total). jevr parses the gateway's
+decision-fallback headers into `response$metadata$fallback`:
+
+```{r, eval = FALSE}
+fallback <- response$metadata$fallback  # absent when it did not trigger
+fallback$triggered
+fallback$primary_model
+fallback$final_model
+fallback$triggering_questions
+response$model                          # names the fallback model if it answered
+```
+
+A language-model fallback has no probability distribution to report. The
+gateway signals this with `confidence: 0` and empty probabilities, which jevr
+turns into `NA` confidence and `NA` probabilities (with
+`confidence_unavailable = TRUE`) rather than a misleading zero. Handle it
+explicitly before routing on confidence:
+
+```{r, eval = FALSE}
+answer <- response$answers$intent
+if (isTRUE(answer$confidence_unavailable)) {
+  # the final answer came from a fallback LLM: choice is usable, confidence is not
+  answer$choice
+}
+
+# NA when confidence is unavailable
+jev_band(response, "intent", breaks = c(0, 0.6, 1), labels = c("review", "auto"))
+```
+
+Noul answers are unaffected by the sentinel.
