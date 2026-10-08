@@ -158,6 +158,10 @@ print.jev_result_set <- function(x, ...) {
   if (length(summary) > 0L) {
     cat("Successes: ", summary$successes, "\n", sep = "")
     cat("Failures: ", summary$failures, "\n", sep = "")
+    if (length(summary$answered_models) > 0L) {
+      cat("Answered models: ", paste(summary$answered_models, collapse = ", "),
+        "\n", sep = "")
+    }
     cat("HTTP attempts: ", summary$http_attempts, "\n", sep = "")
     if (!is.null(summary$llm_invocations) && summary$llm_invocations > 0L) {
       cat("LLM invocations: ", summary$llm_invocations, "\n", sep = "")
@@ -270,6 +274,10 @@ jev_result_value <- function(answer) {
     return(NULL)
   }
 
+  if (inherits(answer, "jev_unknown_answer")) {
+    return(NULL)
+  }
+
   switch(
     answer$type,
     choice = answer$choice,
@@ -297,15 +305,23 @@ jev_result_question_definitions <- function(x) {
 #' @param x A `jev_result_set`.
 #' @param row.names Passed to `data.frame()`.
 #' @param optional Passed to `data.frame()`.
+#' @param format `"wide"` (default) for one row per state and question, or
+#'   `"long"` for one row per state, question, and option; see
+#'   [as.data.frame.jev_response()] for the long-format columns.
 #' @param ... Unused arguments.
-#' @return A data frame with one row per state-question pair. `value`,
+#' @return A data frame with one row per state-question pair, including
+#'   `requested_model`, `answered_model` (the versioned model the server
+#'   reported, `NA` when no response) and `is_alias` (whether the requested
+#'   model is a moving alias such as `jev-latest`). `value`,
 #'   `probabilities`, and `legend` remain list-columns; provenance and error
 #'   fields are returned as scalar columns.
 #' @details
 #' Partial states produce one row for every requested question. Valid answers
 #' have `status = "success"`; invalid or missing individual answers have
 #' `status = "error"` and their question-level error in `error_class` and
-#' `error_message`.
+#' `error_message`. Answers jevr could not interpret (an unknown answer kind,
+#' or a kind that differs from the declared question type) are kept raw in the
+#' response and appear with `status = "unknown_answer"` and empty value columns.
 #' @export
 #' @examplesIf identical(Sys.getenv("JEVR_RUN_EXAMPLES"), "true") && nzchar(Sys.getenv("TYPESAFE_API_KEY"))
 #' states <- list(
@@ -317,7 +333,13 @@ jev_result_question_definitions <- function(x) {
 #' )
 #' results <- jev_map(states, questions, provider = "typesafe")
 #' as.data.frame(results)
-as.data.frame.jev_result_set <- function(x, row.names = NULL, optional = FALSE, ...) {
+as.data.frame.jev_result_set <- function(
+  x, row.names = NULL, optional = FALSE, format = c("wide", "long"), ...
+) {
+  format <- match.arg(format)
+  if (identical(format, "long")) {
+    return(jev_long_result_set(x))
+  }
   questions <- jev_result_question_definitions(x)
   items <- jev_result_set_items(x)
   question_ids <- names(questions)
@@ -334,6 +356,9 @@ as.data.frame.jev_result_set <- function(x, row.names = NULL, optional = FALSE, 
   status <- character(n)
   execution_id <- character(n)
   request_ref <- character(n)
+  requested_model <- rep(NA_character_, n)
+  answered_model <- rep(NA_character_, n)
+  is_alias <- rep(NA, n)
   spec_hash <- character(n)
   state_hash <- character(n)
   error_class <- rep(NA_character_, n)
@@ -365,7 +390,9 @@ as.data.frame.jev_result_set <- function(x, row.names = NULL, optional = FALSE, 
         answer$confidence
       }
       legend[position] <- list(if (is.null(answer)) NULL else answer$legend)
-      status[[position]] <- if (!is.null(answer)) {
+      status[[position]] <- if (inherits(answer, "jev_unknown_answer")) {
+        "unknown_answer"
+      } else if (!is.null(answer)) {
         "success"
       } else if (!is.null(question_error)) {
         "error"
@@ -381,6 +408,17 @@ as.data.frame.jev_result_set <- function(x, row.names = NULL, optional = FALSE, 
         NA_character_
       } else {
         item$request_ref
+      }
+      requested_model[[position]] <- if (is.null(item$provenance$requested_model)) {
+        NA_character_
+      } else {
+        item$provenance$requested_model
+      }
+      answered_model[[position]] <- jev_answered_model(item$response)
+      is_alias[[position]] <- if (is.null(item$provenance$is_alias)) {
+        NA
+      } else {
+        item$provenance$is_alias
       }
       spec_hash[[position]] <- if (is.null(item$provenance$spec_hash)) {
         NA_character_
@@ -413,6 +451,9 @@ as.data.frame.jev_result_set <- function(x, row.names = NULL, optional = FALSE, 
     status = status,
     execution_id = execution_id,
     request_ref = request_ref,
+    requested_model = requested_model,
+    answered_model = answered_model,
+    is_alias = is_alias,
     spec_hash = spec_hash,
     state_hash = state_hash,
     error_class = error_class,

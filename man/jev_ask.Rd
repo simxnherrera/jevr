@@ -7,11 +7,12 @@
 jev_ask(
   state,
   questions,
-  provider = c("typesafe", "openrouter"),
+  provider = c("typesafe", "openrouter", "vercel", "pydantic", "openrouter_decisions"),
   model = NULL,
   timeout = 30,
   max_retries = 3,
-  backend = NULL
+  backend = NULL,
+  fallback = NULL
 )
 }
 \arguments{
@@ -23,11 +24,17 @@ JSON array. Other JSON-serializable R values are passed to the provider.}
 jev_choice(), jev_score(), or jev_noul(), or a \code{jev_spec()} object. The
 names become answer IDs.}
 
-\item{provider}{Provider to use: "typesafe" for the direct TypeSafe API or
-"openrouter" for OpenRouter's Decisions endpoint.}
+\item{provider}{Provider to use: a preset name or a \code{\link[=jev_endpoint]{jev_endpoint()}} object.
+Presets are \code{"typesafe"} (direct TypeSafe API), \code{"openrouter"} (OpenRouter's
+native System One endpoint), \code{"vercel"} (Vercel AI Gateway), \code{"pydantic"}
+(Pydantic AI Gateway), and the legacy \code{"openrouter_decisions"} (OpenRouter's
+alpha Decisions endpoint, which drops extra question fields). A custom
+\code{\link[=jev_endpoint]{jev_endpoint()}} is used as given and forwards extra question fields. This
+is distinct from \code{backend}, which selects an ellmer chat.}
 
-\item{model}{Model name. Defaults to the stable jev-latest alias for
-TypeSafe and ~typesafe/jev-latest for OpenRouter.}
+\item{model}{Model name. Defaults to the endpoint's model: \code{jev-latest} for
+TypeSafe and Pydantic, \code{~typesafe/jev-latest} for OpenRouter, and
+\code{typesafe-ai/jev} for Vercel.}
 
 \item{timeout}{Maximum time in seconds for each HTTP attempt.}
 
@@ -37,10 +44,20 @@ response. Retries use exponential backoff and honor Retry-After.}
 \item{backend}{Optional \code{jev_llm()} backend. Cannot be combined with explicit
 \code{provider}, \code{model}, \code{timeout}, or positive \code{max_retries}. Timeout and
 retries belong to the chat transport. Omitted native defaults do not apply.}
+
+\item{fallback}{Optional \code{\link[=jev_fallback]{jev_fallback()}} describing a Vercel AI Gateway
+decision fallback. Only endpoints with the \code{"fallback"} capability (the
+\code{"vercel"} preset) accept it; otherwise a \code{jev_input_error} is raised
+before any request. See \code{\link[=jev_fallback]{jev_fallback()}}.}
 }
 \value{
 An object of class jev_response with model, typed answers, usage,
-provider metadata, and the unmodified response in raw. With an ellmer
+provider metadata, and the unmodified response in raw. \code{usage$cost} is the
+normalized USD cost (\code{usage.cost}, else Vercel
+\code{provider_metadata.gateway.cost}; omitted when absent or invalid; the map ledger records \code{NA}).
+\code{metadata$provider_metadata} keeps gateway metadata verbatim, with
+\code{metadata$final_provider} and \code{metadata$generation_id} when present; \code{metadata$requested_model} is the
+model asked for. With an ellmer
 backend, raw is the received structured object; answers are the validated
 jevr representation with locally calculated decisions.
 }
@@ -56,9 +73,23 @@ invalid envelope or answer raises an error for the evaluation. Use
 }
 \section{Authentication}{
 
-Set TYPESAFE_API_KEY for the direct TypeSafe provider or
-OPENROUTER_API_KEY for OpenRouter. Keys are read at request time and are
-never stored in the returned object.
+Each preset reads its key from an environment variable: TYPESAFE_API_KEY
+(\code{"typesafe"}), OPENROUTER_API_KEY (\code{"openrouter"} and
+\code{"openrouter_decisions"}), AI_GATEWAY_API_KEY (\code{"vercel"}) and
+PYDANTIC_AI_GATEWAY_API_KEY (\code{"pydantic"}). A custom \code{\link[=jev_endpoint]{jev_endpoint()}} names
+its own variable. Keys are read at request time and are never stored in the
+returned object.
+}
+
+\section{Request limits}{
+
+Choice questions are limited to 255 options and Score questions to 2-10
+levels; violations are input errors. System One also documents 64k tokens
+per request and 32k tokens for the state plus the longest question. Before
+sending, jevr estimates size from the serialized JSON (characters / 4, an
+approximation) and emits a warning of class \code{jev_preflight_warning} if a
+limit looks exceeded; the request is still sent. Disable with
+\code{options(jevr.preflight = FALSE)}.
 }
 
 \section{Errors}{

@@ -4,7 +4,13 @@
 \alias{as.data.frame.jev_result_set}
 \title{Convert a result set to one row per state and requested question}
 \usage{
-\method{as.data.frame}{jev_result_set}(x, row.names = NULL, optional = FALSE, ...)
+\method{as.data.frame}{jev_result_set}(
+  x,
+  row.names = NULL,
+  optional = FALSE,
+  format = c("wide", "long"),
+  ...
+)
 }
 \arguments{
 \item{x}{A \code{jev_result_set}.}
@@ -13,10 +19,17 @@
 
 \item{optional}{Passed to \code{data.frame()}.}
 
+\item{format}{\code{"wide"} (default) for one row per state and question, or
+\code{"long"} for one row per state, question, and option; see
+\code{\link[=as.data.frame.jev_response]{as.data.frame.jev_response()}} for the long-format columns.}
+
 \item{...}{Unused arguments.}
 }
 \value{
-A data frame with one row per state-question pair. \code{value},
+A data frame with one row per state-question pair, including
+\code{requested_model}, \code{answered_model} (the versioned model the server
+reported, \code{NA} when no response) and \code{is_alias} (whether the requested
+model is a moving alias such as \code{jev-latest}). \code{value},
 \code{probabilities}, and \code{legend} remain list-columns; provenance and error
 fields are returned as scalar columns.
 }
@@ -27,7 +40,9 @@ Convert a result set to one row per state and requested question
 Partial states produce one row for every requested question. Valid answers
 have \code{status = "success"}; invalid or missing individual answers have
 \code{status = "error"} and their question-level error in \code{error_class} and
-\code{error_message}.
+\code{error_message}. Answers jevr could not interpret (an unknown answer kind,
+or a kind that differs from the declared question type) are kept raw in the
+response and appear with \code{status = "unknown_answer"} and empty value columns.
 }
 \examples{
 \dontshow{if (identical(Sys.getenv("JEVR_RUN_EXAMPLES"), "true") && nzchar(Sys.getenv("TYPESAFE_API_KEY"))) withAutoprint(\{ # examplesIf}

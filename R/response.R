@@ -110,21 +110,103 @@ jev_required_response_field <- function(answer, field, question_id) {
   answer[[field]]
 }
 
+# Forward compatibility: answers whose kind this version does not understand
+# (or whose kind differs from the declared question type) are kept raw instead
+# of aborting the whole response. The caller emits one warning per response.
+jev_unknown_answer <- function(answer, expected_type, reason) {
+  structure(
+    list(
+      type = answer$type,
+      expected_type = expected_type,
+      reason = reason,
+      raw = answer
+    ),
+    class = c("jev_unknown_answer", "jev_answer", "list")
+  )
+}
+
+jev_warn_unknown_answers <- function(answers) {
+  unknown <- Filter(function(answer) inherits(answer, "jev_unknown_answer"), answers)
+  if (length(unknown) == 0L) {
+    return(invisible(NULL))
+  }
+
+  details <- vapply(
+    names(unknown),
+    function(id) {
+      answer <- unknown[[id]]
+      if (identical(answer$reason, "type_mismatch")) {
+        paste0(id, " (answer type \"", answer$type, "\", expected \"",
+          answer$expected_type, "\")")
+      } else {
+        paste0(id, " (unknown answer type \"", answer$type, "\")")
+      }
+    },
+    character(1)
+  )
+  condition <- structure(
+    class = c("jev_unknown_answer_warning", "jev_warning", "warning", "condition"),
+    list(
+      message = paste0(
+        "Kept ", length(unknown), " answer(s) raw because jevr could not ",
+        "interpret them: ", paste(details, collapse = ", "),
+        ". Access them through `$raw`."
+      ),
+      call = NULL,
+      question_ids = names(unknown)
+    )
+  )
+  warning(condition)
+}
+
+# AI Gateway reports a language-model Choice/Score fallback answer as
+# confidence 0 with empty probabilities, meaning "unavailable".
+jev_is_unavailable_sentinel <- function(answer) {
+  probabilities <- answer$probabilities
+  confidence <- answer$confidence
+  is.list(probabilities) && length(probabilities) == 0L &&
+    is.numeric(confidence) && length(confidence) == 1L &&
+    !is.na(confidence) && confidence == 0
+}
+
+jev_unavailable_probabilities <- function(option_names) {
+  if (is.null(option_names)) {
+    return(stats::setNames(numeric(0), character(0)))
+  }
+  stats::setNames(rep(NA_real_, length(option_names)), option_names)
+}
+
 jev_parse_answer <- function(
   answer, question_id, question, allow_missing_confidence = FALSE,
-  probability_tolerance = 1e-6
+  probability_tolerance = 1e-6, allow_sentinel = FALSE
 ) {
   expected_type <- question$type
 
-  if (!is.list(answer) || !identical(answer$type, expected_type)) {
+  if (!is.list(answer) || !is.character(answer$type) ||
+    length(answer$type) != 1L || is.na(answer$type) || !nzchar(answer$type)) {
     jev_abort(
       paste0(
         "Answer ", question_id,
-        " does not match its question type (", expected_type, ")."
+        " is malformed: it must be an object with a type field."
       ),
       class = "jev_response_error"
     )
   }
+
+  if (!identical(answer$type, expected_type)) {
+    reason <- if (answer$type %in% c("choice", "score", "noul")) {
+      "type_mismatch"
+    } else {
+      "unknown_type"
+    }
+    return(jev_unknown_answer(answer, expected_type, reason))
+  }
+
+  # The unavailable sentinel is only meaningful when a gateway decision
+  # fallback actually answered; otherwise normal validation applies.
+  sentinel <- isTRUE(allow_sentinel) &&
+    expected_type %in% c("choice", "score") &&
+    jev_is_unavailable_sentinel(answer)
 
   if (identical(expected_type, "choice")) {
     choice <- jev_required_response_field(answer, "choice", question_id)
@@ -148,6 +230,14 @@ jev_parse_answer <- function(
 
     expected_names <- if (is.null(question$criteria)) NULL else names(question$criteria)
 
+    if (sentinel) {
+      answer$probabilities <- jev_unavailable_probabilities(expected_names)
+      answer$confidence <- NA_real_
+      answer$confidence_unavailable <- TRUE
+      class(answer) <- c("jev_choice_answer", "jev_answer", "list")
+      return(answer)
+    }
+
     answer$probabilities <- jev_validate_probability_map(
       probabilities,
       paste0(question_id, "$probabilities"),
@@ -165,7 +255,11 @@ jev_parse_answer <- function(
 
   if (identical(expected_type, "score")) {
     score <- jev_required_response_field(answer, "score", question_id)
-    legend <- jev_required_response_field(answer, "legend", question_id)
+    legend <- if (sentinel && is.null(answer$legend)) {
+      NULL
+    } else {
+      jev_required_response_field(answer, "legend", question_id)
+    }
     probabilities <- jev_required_response_field(
       answer, "probabilities", question_id
     )
@@ -181,6 +275,20 @@ jev_parse_answer <- function(
 
     expected_names <- if (is.null(question$criteria)) names(probabilities) else {
       as.character(seq_along(question$criteria) - 1L)
+    }
+    if (sentinel) {
+      if (!is.null(legend)) {
+        answer$legend <- jev_validate_legend(
+          legend, paste0(question_id, "$legend"), expected_names
+        )
+      }
+      answer$probabilities <- jev_unavailable_probabilities(
+        if (is.null(question$criteria)) NULL else expected_names
+      )
+      answer$confidence <- NA_real_
+      answer$confidence_unavailable <- TRUE
+      class(answer) <- c("jev_score_answer", "jev_answer", "list")
+      return(answer)
     }
     answer$legend <- jev_validate_legend(
       legend,
@@ -272,6 +380,39 @@ jev_response_question_definitions <- function(questions) {
   list(ids = question_ids, definitions = question_definitions)
 }
 
+jev_gateway_metadata <- function(provider_metadata) {
+  gateway <- if (is.list(provider_metadata)) provider_metadata$gateway else NULL
+  if (is.list(gateway)) gateway else list()
+}
+
+jev_nonempty_string <- function(value) {
+  if (is.character(value) && length(value) == 1L && !is.na(value) &&
+    nzchar(value)) {
+    value
+  } else {
+    NULL
+  }
+}
+
+# One numeric cost per response (USD). Prefers `usage.cost` (OpenRouter), then
+# `provider_metadata.gateway.cost` (Vercel AI Gateway, a string). Anything
+# unparseable, negative or non-finite becomes NA; this never errors.
+jev_parse_cost <- function(value) {
+  if (is.null(value) || length(value) != 1L || is.list(value)) {
+    return(NA_real_)
+  }
+  parsed <- suppressWarnings(
+    if (is.character(value)) as.numeric(trimws(value)) else as.numeric(value)
+  )
+  if (is.na(parsed) || !is.finite(parsed) || parsed < 0) NA_real_ else parsed
+}
+
+jev_normalize_cost <- function(usage_cost, gateway_cost) {
+  cost <- jev_parse_cost(usage_cost)
+  if (is.na(cost)) cost <- jev_parse_cost(gateway_cost)
+  cost
+}
+
 jev_validate_response_envelope <- function(
   body,
   provider,
@@ -361,6 +502,21 @@ jev_validate_response_envelope <- function(
   } else {
     list(provider_metadata = body$metadata)
   }
+  if (!is.null(body$provider_metadata)) {
+    metadata$provider_metadata <- body$provider_metadata
+  }
+  gateway <- jev_gateway_metadata(body$provider_metadata)
+  routing <- gateway$routing
+  if (!is.list(routing)) routing <- list()
+  final_provider <- jev_nonempty_string(routing$finalProvider)
+  if (is.null(final_provider)) final_provider <- jev_nonempty_string(routing$final_provider)
+  generation_id <- jev_nonempty_string(gateway$generationId)
+  if (is.null(generation_id)) generation_id <- jev_nonempty_string(gateway$generation_id)
+  metadata$final_provider <- final_provider
+  metadata$generation_id <- generation_id
+  cost <- jev_normalize_cost(usage$cost, gateway$cost)
+  # Keep `usage$cost` absent (rather than NA) when unknown or invalid.
+  usage$cost <- if (is.na(cost)) NULL else cost
   metadata$provider <- provider
   metadata$id <- if (is.null(body$id)) NULL else body$id
   metadata$upstream_provider <- if (is.null(body$provider)) NULL else body$provider
@@ -376,7 +532,11 @@ jev_validate_response_envelope <- function(
   )
 }
 
-jev_parse_response_answers <- function(envelope, allow_invalid = FALSE) {
+jev_parse_response_answers <- function(
+  envelope,
+  allow_invalid = FALSE,
+  allow_sentinel = FALSE
+) {
   parsed_answers <- list()
   question_errors <- list()
 
@@ -398,7 +558,8 @@ jev_parse_response_answers <- function(envelope, allow_invalid = FALSE) {
         jev_parse_answer(
           envelope$answers[[id]],
           id,
-          envelope$definitions[[index]]
+          envelope$definitions[[index]],
+          allow_sentinel = allow_sentinel
         ),
         error = identity
       )
@@ -421,6 +582,8 @@ jev_parse_response_answers <- function(envelope, allow_invalid = FALSE) {
     }
   }
 
+  jev_warn_unknown_answers(parsed_answers)
+
   list(answers = parsed_answers, question_errors = question_errors)
 }
 
@@ -437,25 +600,43 @@ jev_new_response <- function(envelope, answers) {
   )
 }
 
-jev_parse_response <- function(body, provider, questions) {
+jev_parse_response <- function(
+  body,
+  provider,
+  questions,
+  allow_sentinel = FALSE
+) {
   envelope <- jev_validate_response_envelope(
     body,
     provider,
     questions,
     allow_missing = FALSE
   )
-  parsed <- jev_parse_response_answers(envelope, allow_invalid = FALSE)
+  parsed <- jev_parse_response_answers(
+    envelope,
+    allow_invalid = FALSE,
+    allow_sentinel = allow_sentinel
+  )
   jev_new_response(envelope, parsed$answers)
 }
 
-jev_parse_response_partial <- function(body, provider, questions) {
+jev_parse_response_partial <- function(
+  body,
+  provider,
+  questions,
+  allow_sentinel = FALSE
+) {
   envelope <- jev_validate_response_envelope(
     body,
     provider,
     questions,
     allow_missing = TRUE
   )
-  parsed <- jev_parse_response_answers(envelope, allow_invalid = TRUE)
+  parsed <- jev_parse_response_answers(
+    envelope,
+    allow_invalid = TRUE,
+    allow_sentinel = allow_sentinel
+  )
 
   list(
     response = jev_new_response(envelope, parsed$answers),

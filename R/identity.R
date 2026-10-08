@@ -183,6 +183,9 @@ jev_state_hash <- function(state) {
 #' @param endpoint_contract_version Version of the provider payload contract.
 #' @param inference_options Options that affect inference semantics.
 #' @param routing_options Options that affect request routing semantics.
+#' @param fallback Optional [jev_fallback()]. A fallback changes which model
+#'   produces the answers, so it is part of the identity; when `NULL` the
+#'   identity is unchanged from earlier versions.
 #' @return A lowercase SHA-256 hexadecimal hash.
 #' @export
 #' @examples
@@ -202,7 +205,8 @@ jev_execution_id <- function(
   model,
   endpoint_contract_version = 1L,
   inference_options = list(),
-  routing_options = list()
+  routing_options = list(),
+  fallback = NULL
 ) {
   jev_validate_state(state)
   if (!is.character(provider) || length(provider) != 1L || is.na(provider) ||
@@ -219,7 +223,7 @@ jev_execution_id <- function(
     jev_identity_secret_names,
     jev_identity_operational_names
   )
-  jev_identity_hash(list(
+  fields <- list(
     identity_schema_version = 1L,
     state_wire = state,
     spec_manifest = definition,
@@ -229,5 +233,65 @@ jev_execution_id <- function(
     requested_model = model,
     inference_options = inference_options,
     routing_options = routing_options
-  ), excluded_names = excluded_names)
+  )
+  if (!is.null(fallback)) {
+    fields$decision_fallback <- jev_fallback_provider_options(fallback)
+  }
+  jev_identity_hash(fields, excluded_names = excluded_names)
+}
+
+# Is `model` a moving alias rather than a pinned version? Recognises
+# `jev-latest`, `jev-preview`, OpenRouter `~` aliases and the unversioned
+# Vercel `typesafe-ai/jev`. Returns NA for NULL/NA input.
+jev_model_is_alias <- function(model) {
+  if (!is.character(model) || length(model) != 1L || is.na(model)) {
+    return(NA)
+  }
+  if (startsWith(model, "~")) {
+    return(TRUE)
+  }
+  base <- sub("^.*/", "", model)
+  base %in% c("jev", "jev-latest", "jev-preview")
+}
+
+jev_answered_model <- function(response) {
+  model <- if (is.null(response)) NULL else response$model
+  if (is.character(model) && length(model) == 1L && !is.na(model) &&
+    nzchar(model)) {
+    model
+  } else {
+    NA_character_
+  }
+}
+
+jev_warn_model_drift <- function(results) {
+  models <- sort(unique(stats::na.omit(vapply(
+    results,
+    function(item) jev_answered_model(item$response),
+    character(1)
+  ))))
+  if (length(models) > 1L) {
+    requested <- unique(stats::na.omit(vapply(
+      results,
+      function(item) {
+        value <- item$provenance$requested_model
+        if (is.null(value)) NA_character_ else as.character(value)
+      },
+      character(1)
+    )))
+    warning(structure(
+      class = c("jev_model_drift_warning", "warning", "condition"),
+      list(
+        message = paste0(
+          "More than one model version answered within this run: ",
+          paste(models, collapse = ", "), ". Requested: ",
+          paste(requested, collapse = ", "), "."
+        ),
+        call = NULL,
+        models = as.character(models),
+        requested_model = requested
+      )
+    ))
+  }
+  invisible(models)
 }

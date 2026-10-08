@@ -95,7 +95,8 @@ jev_build_openrouter_request <- function(
   model,
   timeout,
   rate_limit = NULL,
-  api_key = jev_api_key("openrouter")
+  endpoint = jev_endpoint_preset("openrouter_decisions"),
+  api_key = jev_api_key(endpoint)
 ) {
   payload <- list(
     model = model,
@@ -103,43 +104,13 @@ jev_build_openrouter_request <- function(
     questions = jev_openrouter_questions(questions)
   )
   request <- jev_build_request(
-    url = "https://openrouter.ai/api/alpha/decisions",
+    url = jev_endpoint_url(endpoint),
     payload = payload,
     api_key = api_key,
     timeout = timeout,
     rate_limit = rate_limit,
-    throttle_realm = "jevr-openrouter",
-    headers = stats::setNames(
-      c(
-        "https://github.com/simxnherrera/jevr",
-        "jevr"
-      ),
-      c("HTTP-Referer", "X-OpenRouter-Title")
-    )
+    throttle_realm = paste0("jevr-", endpoint$name),
+    headers = endpoint$headers
   )
-  list(request = request, provider = "openrouter")
-}
-
-jev_request_openrouter <- function(
-  state,
-  questions,
-  model,
-  timeout,
-  max_retries,
-  retry_budget = Inf
-) {
-  built <- jev_build_openrouter_request(
-    state = state,
-    questions = questions,
-    model = model,
-    timeout = timeout
-  )
-  response <- jev_send_request(
-    built$request,
-    provider = "openrouter",
-    max_retries = max_retries,
-    retry_budget = retry_budget
-  )
-
-  list(body = jev_body_json(response, "openrouter"), response = response)
+  list(request = request, provider = endpoint$name)
 }

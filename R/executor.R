@@ -124,18 +124,9 @@ jev_map_deliver <- function(items, indices, on_result) {
 
   callback_error <- NULL
   for (index in indices) {
-    item <- items[[index]]
-    result <- jev_result(
-      state_id = item$state_id,
-      input_index = item$input_index,
-      status = item$status,
-      response = item$response,
-      question_errors = item$question_errors,
-      provenance = item$provenance,
-      attempts = item$attempts_log,
-      error = item$error,
-      request_ref = item$request_ref
-    )
+    # Same conversion as the returned result set, so callbacks see identical
+    # provenance (including the answered model).
+    result <- jev_map_as_result(items[[index]])
     callback_error <- tryCatch(
       {
         on_result(result)
@@ -168,8 +159,10 @@ jev_execute_map <- function(
   now = jev_executor_now,
   random = stats::runif,
   response_timing = httr2::resp_timing,
-  delivered = integer()
+  delivered = integer(),
+  fallback = NULL
 ) {
+  provider_name <- jev_provider_name(provider)
   requests <- jev_empty_attempt_ledger()
   pending <- which(vapply(items, function(item) item$status == "pending", logical(1)))
   run_status <- "completed"
@@ -245,7 +238,8 @@ jev_execute_map <- function(
           questions = questions,
           model = model,
           timeout = min(timeout, remaining),
-          rate_limit = rate_limit
+          rate_limit = rate_limit,
+          fallback = fallback
         ),
         error = identity
       )
@@ -366,7 +360,7 @@ jev_execute_map <- function(
           usage <- list()
 
           if (inherits(response, "httr2_response")) {
-            http_metadata <- jev_response_metadata(response, provider)
+            http_metadata <- jev_response_metadata(response, provider_name)
             request_id <- if (is.null(http_metadata$request_id)) {
               NA_character_
             } else {
@@ -375,7 +369,7 @@ jev_execute_map <- function(
             status <- httr2::resp_status(response)
             if (status >= 200L && status < 300L) {
               body <- tryCatch(
-                jev_body_json(response, provider),
+                jev_body_json(response, provider_name),
                 error = identity
               )
               if (inherits(body, "condition")) {
@@ -383,7 +377,12 @@ jev_execute_map <- function(
                 outcome <- "parse_error"
               } else {
                 parsed <- tryCatch(
-                  jev_parse_response_partial(body, provider, questions),
+                  jev_parse_response_partial(
+                    body,
+                    provider_name,
+                    questions,
+                    allow_sentinel = isTRUE(http_metadata$fallback$triggered)
+                  ),
                   error = identity
                 )
                 if (inherits(parsed, "condition")) {
@@ -414,7 +413,7 @@ jev_execute_map <- function(
                 error = function(error) NULL
               )
               error <- tryCatch(
-                jev_http_error(status, provider, body, item$attempts),
+                jev_http_error(status, provider_name, body, item$attempts),
                 error = identity
               )
               outcome <- "http_error"

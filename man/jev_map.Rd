@@ -7,7 +7,7 @@
 jev_map(
   states,
   questions,
-  provider = c("typesafe", "openrouter"),
+  provider = c("typesafe", "openrouter", "vercel", "pydantic", "openrouter_decisions"),
   model = NULL,
   concurrency = 4L,
   timeout = 30,
@@ -16,7 +16,8 @@ jev_map(
   retry_budget = 120,
   on_result = NULL,
   progress = interactive(),
-  backend = NULL
+  backend = NULL,
+  fallback = NULL
 )
 }
 \arguments{
@@ -25,7 +26,9 @@ supplies durable state IDs; unnamed inputs receive positional IDs.}
 
 \item{questions}{A named list of questions or a \code{jev_spec()} object.}
 
-\item{provider}{Provider to use.}
+\item{provider}{Provider to use: a preset name (\code{"typesafe"},
+\code{"openrouter"}, \code{"vercel"}, \code{"pydantic"}, or the legacy
+\code{"openrouter_decisions"}) or a \code{\link[=jev_endpoint]{jev_endpoint()}} object.}
 
 \item{model}{Requested model, or the provider default when \code{NULL}.}
 
@@ -47,6 +50,10 @@ supplies durable state IDs; unnamed inputs receive positional IDs.}
 \code{concurrency} defaults to one and larger values are rejected. Explicit
 \code{provider}, \code{model}, \code{timeout}, \code{retry_budget}, and positive \code{max_retries}
 are rejected. \code{rate_limit} controls admission between evaluations.}
+
+\item{fallback}{Optional \code{\link[=jev_fallback]{jev_fallback()}} applied to every request; see
+\code{\link[=jev_ask]{jev_ask()}}. It is part of each state's \code{execution_id}. Cannot be combined
+with \code{backend}.}
 }
 \value{
 A \code{jev_result_set} preserving input order and IDs.
@@ -75,6 +82,22 @@ and internal transport attempts are unknown. \code{summary()$llm_invocations}
 counts these calls separately from native HTTP attempts. Interrupts retain
 completed results and cancel remaining evaluations. Callback failures stop
 admission and leave remaining states \code{not_started}.
+
+Every result records \code{requested_model}, \code{answered_model} (the versioned
+model the server reported) and \code{is_alias} in its \code{provenance}. Execution ids
+are computed before sending, so they use the requested model only: two runs
+with \code{jev-latest} share ids even if different model versions answered, and
+alias-based results should not be reused across sessions. If more than one
+distinct answered model appears in a run, one warning of class
+\code{jev_model_drift_warning} is signalled (distinct models in the condition's
+\code{models}); \code{summary()$answered_models} lists the models seen.
+
+Before execution, states whose estimated request size (serialized JSON
+characters / 4, approximate) exceeds the documented 64k-token request or
+32k-token state plus longest question limits trigger a single aggregated
+warning of class \code{jev_preflight_warning} listing the affected state IDs
+(also in the condition's \code{state_ids}). Requests are still sent. Disable
+with \code{options(jevr.preflight = FALSE)}.
 }
 \examples{
 \dontshow{if (identical(Sys.getenv("JEVR_RUN_EXAMPLES"), "true") && nzchar(Sys.getenv("TYPESAFE_API_KEY"))) withAutoprint(\{ # examplesIf}

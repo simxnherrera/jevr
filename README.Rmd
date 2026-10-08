@@ -180,9 +180,25 @@ result <- jev_ask(
 )
 ```
 
-It uses `~typesafe/jev-latest` by default and authenticates with
-`OPENROUTER_API_KEY`. Structured JSON instructions and criteria are preserved
-when the provider contract accepts them.
+It uses OpenRouter's native System One endpoint (`/api/v1/systemone`) with
+`~typesafe/jev-latest` by default and authenticates with `OPENROUTER_API_KEY`.
+The older alpha Decisions endpoint remains available as
+`provider = "openrouter_decisions"`.
+
+### Other gateways and custom endpoints
+
+`provider` also accepts `"vercel"` (`AI_GATEWAY_API_KEY`), `"pydantic"`
+(`PYDANTIC_AI_GATEWAY_API_KEY`), or any server that speaks the TypeSafe
+`/v1/systemone` format via `jev_endpoint()`:
+
+```{r, eval=FALSE}
+gateway <- jev_endpoint(
+  base_url = "https://gateway.example.com/typesafe",
+  api_key_env = "EXAMPLE_GATEWAY_API_KEY",
+  model = "jev-latest"
+)
+result <- jev_ask(state, questions, provider = gateway)
+```
 
 ### ellmer and ellmercodex (optional)
 
@@ -282,6 +298,20 @@ Tests run without network by default. The optional real integration test
 requires `JEVR_RUN_ELLMERCODEX_INTEGRATION=true` and a separately authenticated
 ellmercodex session. Enabling it uses the subscription and sends one evaluation
 with Choice, Score and Noul. It does not perform authentication for you.
+
+## Listing models
+
+`jev_models()` lists the models an endpoint serves (`GET /v1/models`) as a
+data frame with `name`, `description` and `release_date`. It works with the
+`"typesafe"`, `"vercel"` and `"pydantic"` presets and with custom
+`jev_endpoint()` objects. OpenRouter uses its own catalogue format, so
+`jev_models("openrouter")` raises an error pointing to
+<https://openrouter.ai/typesafe>.
+
+```{r, eval=FALSE}
+jev_models()
+jev_models("vercel")
+```
 
 ## Versioned specifications and multiple states
 

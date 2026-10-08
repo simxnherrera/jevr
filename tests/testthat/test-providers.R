@@ -1,4 +1,4 @@
-test_that("OpenRouter uses the Decisions endpoint and its model alias", {
+test_that("Legacy OpenRouter Decisions: uses the Decisions endpoint and its model alias", {
   withr::local_envvar(OPENROUTER_API_KEY = "fake-openrouter-key")
   captured_request <- NULL
   response_body <- paste0(
@@ -27,12 +27,12 @@ test_that("OpenRouter uses the Decisions endpoint and its model alias", {
           criteria = c(true = "Time-sensitive", false = "Not urgent")
         )
       ),
-      provider = "openrouter",
+      provider = "openrouter_decisions",
       max_retries = 0
     )
   )
 
-  expect_equal(result$metadata$provider, "openrouter")
+  expect_equal(result$metadata$provider, "openrouter_decisions")
   expect_equal(result$metadata$id, "decision-1")
   expect_equal(result$metadata$upstream_provider, "TypeSafe")
   expect_equal(result$answers$urgent$noul, 0.88)
@@ -53,7 +53,7 @@ test_that("OpenRouter uses the Decisions endpoint and its model alias", {
   )
 })
 
-test_that("OpenRouter serializes choice criteria as a JSON object", {
+test_that("Legacy OpenRouter Decisions: serializes choice criteria as a JSON object", {
   withr::local_envvar(OPENROUTER_API_KEY = "fake-openrouter-key")
   captured_request <- NULL
   mock <- function(req) {
@@ -83,7 +83,7 @@ test_that("OpenRouter serializes choice criteria as a JSON object", {
           c(billing = "Payments", technical = "Bugs")
         )
       ),
-      provider = "openrouter",
+      provider = "openrouter_decisions",
       max_retries = 0
     )
   )
@@ -95,7 +95,7 @@ test_that("OpenRouter serializes choice criteria as a JSON object", {
   )
 })
 
-test_that("OpenRouter preserves structured question values", {
+test_that("Legacy OpenRouter Decisions: preserves structured question values", {
   withr::local_envvar(OPENROUTER_API_KEY = "fake-openrouter-key")
   captured_request <- NULL
   mock <- function(req) {
@@ -127,7 +127,7 @@ test_that("OpenRouter preserves structured question values", {
           )
         )
       ),
-      provider = "openrouter",
+      provider = "openrouter_decisions",
       max_retries = 0
     )
   )
@@ -160,4 +160,21 @@ test_that("HTTP errors include status and corrective guidance", {
       )
     )
   )
+})
+
+test_that("Noul questions without criteria omit the field instead of sending null", {
+  payload <- jevr:::jev_request_payload(
+    "state",
+    list(
+      bare = jev_noul("Urgent?"),
+      described = jev_noul("Urgent?", c(true = "Yes", false = "No"))
+    ),
+    "jev-latest"
+  )
+  json <- jsonlite::fromJSON(
+    jsonlite::toJSON(payload, auto_unbox = TRUE, null = "null"),
+    simplifyVector = FALSE
+  )
+  expect_false("criteria" %in% names(json$questions$bare))
+  expect_identical(json$questions$described$criteria$true, "Yes")
 })

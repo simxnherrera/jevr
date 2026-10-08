@@ -1,25 +1,25 @@
 jev_default_model <- function(provider) {
-  c(
-    typesafe = "jev-latest",
-    openrouter = "~typesafe/jev-latest"
-  )[[provider]]
-}
-
-jev_api_key_name <- function(provider) {
-  c(
-    typesafe = "TYPESAFE_API_KEY",
-    openrouter = "OPENROUTER_API_KEY"
-  )[[provider]]
+  model <- if (inherits(provider, "jev_endpoint")) provider$model else NULL
+  if (is.null(model)) {
+    jev_abort(
+      paste0(
+        "The ", jev_provider_name(provider),
+        " endpoint has no default model; supply model."
+      ),
+      class = "jev_input_error"
+    )
+  }
+  model
 }
 
 jev_api_key <- function(provider) {
-  name <- jev_api_key_name(provider)
+  name <- provider$api_key_env
   key <- Sys.getenv(name, unset = "")
 
   if (!nzchar(key)) {
     jev_abort(
       paste0(
-        "No API key was found for ", provider, ". Set the ", name,
+        "No API key was found for ", jev_provider_name(provider), ". Set the ", name,
         " environment variable before calling jev_ask()."
       ),
       class = "jev_auth_error"
@@ -284,7 +284,11 @@ jev_response_metadata <- function(response, provider) {
     "content-length", "content-type", "date", "retry-after", "retry-after-ms",
     "server", "x-openrouter-request-id", "x-ratelimit-limit",
     "x-ratelimit-remaining", "x-ratelimit-reset", "x-ratelimit-request-id",
-    "x-request-id"
+    "x-request-id",
+    paste0("x-ai-gateway-decision-fallback-", c(
+      "triggered", "final-model", "primary-model", "triggering-questions",
+      "triggering-questions-truncated"
+    ))
   )
   headers <- headers[header_names %in% allowed_headers]
   header_names <- tolower(names(headers))
@@ -303,11 +307,14 @@ jev_response_metadata <- function(response, provider) {
     }
   }
 
-  list(
+  out <- list(
     provider = provider,
     http_status = status,
     headers = headers,
     request_id = request_id,
     timing = timing
   )
+  fallback <- jev_parse_fallback_headers(headers)
+  if (!is.null(fallback)) out$fallback <- fallback
+  out
 }

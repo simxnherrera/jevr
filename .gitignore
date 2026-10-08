@@ -5,3 +5,4 @@ WORKING_ON.md
 .httr-oauth
 .DS_Store
 .quarto
+.claude/worktrees/
