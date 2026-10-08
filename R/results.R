@@ -301,6 +301,9 @@ jev_result_question_definitions <- function(x) {
 #' @param x A `jev_result_set`.
 #' @param row.names Passed to `data.frame()`.
 #' @param optional Passed to `data.frame()`.
+#' @param format `"wide"` (default) for one row per state and question, or
+#'   `"long"` for one row per state, question, and option; see
+#'   [as.data.frame.jev_response()] for the long-format columns.
 #' @param ... Unused arguments.
 #' @return A data frame with one row per state-question pair. `value`,
 #'   `probabilities`, and `legend` remain list-columns; provenance and error
@@ -323,7 +326,13 @@ jev_result_question_definitions <- function(x) {
 #' )
 #' results <- jev_map(states, questions, provider = "typesafe")
 #' as.data.frame(results)
-as.data.frame.jev_result_set <- function(x, row.names = NULL, optional = FALSE, ...) {
+as.data.frame.jev_result_set <- function(
+  x, row.names = NULL, optional = FALSE, format = c("wide", "long"), ...
+) {
+  format <- match.arg(format)
+  if (identical(format, "long")) {
+    return(jev_long_result_set(x))
+  }
   questions <- jev_result_question_definitions(x)
   items <- jev_result_set_items(x)
   question_ids <- names(questions)
