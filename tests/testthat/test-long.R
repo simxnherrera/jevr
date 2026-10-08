@@ -105,7 +105,7 @@ test_that("score selected is the mode even when the score is fractional", {
     type = "score", score = 0.5,
     probabilities = c("0" = 0.5, "1" = 0.5), confidence = 0.9
   )
-  unknown <- list(type = "mystery")
+  unknown <- jev_unknown_answer(list(type = "mystery"), "choice", "unknown_type")
   response <- structure(
     list(model = "m", answers = list(s = score, t = tie, u = unknown)),
     class = "jev_response"

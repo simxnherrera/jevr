@@ -31,8 +31,13 @@ jev_long_question_rows <- function(
   noul <- na_num
 
   if (!is.null(answer)) {
-    type <- answer$type
-    if (identical(type, "noul")) {
+    if (!inherits(answer, "jev_unknown_answer")) {
+      type <- answer$type
+    }
+    if (inherits(answer, "jev_unknown_answer")) {
+      status <- "unknown_answer"
+      if (!is.null(answer$expected_type)) type <- answer$expected_type
+    } else if (identical(type, "noul")) {
       options <- c("true", "false")
       probability <- c(answer$noul, 1 - answer$noul)
       selected <- c(NA, NA)

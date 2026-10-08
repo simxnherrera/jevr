@@ -39,7 +39,7 @@ questions yield the options \code{"true"} and \code{"false"} with probabilities
 \code{noul} and \code{1 - noul}; \code{selected} is \code{NA} because jevr never chooses a
 threshold, so callers apply their own (for example with \code{jev_band()}).
 Answers of an unrecognised type produce one NA row with
-\code{status = "unknown_type"}. \code{confidence} is NA for noul, \code{score} is NA for
+\code{status = "unknown_answer"}. \code{confidence} is NA for noul, \code{score} is NA for
 non-score questions, and \code{noul} is NA for other
 questions. Failed or missing questions produce a single row with \code{NA}
 option, probability, and selected values, the state status (or \code{"error"}
