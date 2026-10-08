@@ -264,3 +264,14 @@ test_that("unknown answers count as unanswered copies", {
   expect_equal(team$status, "partial")
   expect_false("team__perm2" %in% names(team$choices[[1]]))
 })
+
+test_that("jev_consistency returns a zero-row data frame for an empty map", {
+  permuted <- jev_permute_choices(consistency_questions(), n = 2, seed = 1)
+  withr::local_envvar(TYPESAFE_API_KEY = "k")
+  empty <- jev_map(list(), permuted, max_retries = 0, progress = FALSE)
+  out <- jev_consistency(empty, permuted)
+  expect_s3_class(out, "data.frame")
+  expect_equal(nrow(out), 0L)
+  expect_true(all(c("state_id", "question_id", "choice", "agreement",
+    "probabilities", "choices", "orders") %in% names(out)))
+})

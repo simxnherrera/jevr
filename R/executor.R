@@ -124,18 +124,9 @@ jev_map_deliver <- function(items, indices, on_result) {
 
   callback_error <- NULL
   for (index in indices) {
-    item <- items[[index]]
-    result <- jev_result(
-      state_id = item$state_id,
-      input_index = item$input_index,
-      status = item$status,
-      response = item$response,
-      question_errors = item$question_errors,
-      provenance = item$provenance,
-      attempts = item$attempts_log,
-      error = item$error,
-      request_ref = item$request_ref
-    )
+    # Same conversion as the returned result set, so callbacks see identical
+    # provenance (including the answered model).
+    result <- jev_map_as_result(items[[index]])
     callback_error <- tryCatch(
       {
         on_result(result)
@@ -386,7 +377,12 @@ jev_execute_map <- function(
                 outcome <- "parse_error"
               } else {
                 parsed <- tryCatch(
-                  jev_parse_response_partial(body, provider_name, questions),
+                  jev_parse_response_partial(
+                    body,
+                    provider_name,
+                    questions,
+                    allow_sentinel = isTRUE(http_metadata$fallback$triggered)
+                  ),
                   error = identity
                 )
                 if (inherits(parsed, "condition")) {

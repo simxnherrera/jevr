@@ -178,7 +178,7 @@ jev_unavailable_probabilities <- function(option_names) {
 
 jev_parse_answer <- function(
   answer, question_id, question, allow_missing_confidence = FALSE,
-  probability_tolerance = 1e-6
+  probability_tolerance = 1e-6, allow_sentinel = FALSE
 ) {
   expected_type <- question$type
 
@@ -202,7 +202,10 @@ jev_parse_answer <- function(
     return(jev_unknown_answer(answer, expected_type, reason))
   }
 
-  sentinel <- expected_type %in% c("choice", "score") &&
+  # The unavailable sentinel is only meaningful when a gateway decision
+  # fallback actually answered; otherwise normal validation applies.
+  sentinel <- isTRUE(allow_sentinel) &&
+    expected_type %in% c("choice", "score") &&
     jev_is_unavailable_sentinel(answer)
 
   if (identical(expected_type, "choice")) {
@@ -529,7 +532,11 @@ jev_validate_response_envelope <- function(
   )
 }
 
-jev_parse_response_answers <- function(envelope, allow_invalid = FALSE) {
+jev_parse_response_answers <- function(
+  envelope,
+  allow_invalid = FALSE,
+  allow_sentinel = FALSE
+) {
   parsed_answers <- list()
   question_errors <- list()
 
@@ -551,7 +558,8 @@ jev_parse_response_answers <- function(envelope, allow_invalid = FALSE) {
         jev_parse_answer(
           envelope$answers[[id]],
           id,
-          envelope$definitions[[index]]
+          envelope$definitions[[index]],
+          allow_sentinel = allow_sentinel
         ),
         error = identity
       )
@@ -592,25 +600,43 @@ jev_new_response <- function(envelope, answers) {
   )
 }
 
-jev_parse_response <- function(body, provider, questions) {
+jev_parse_response <- function(
+  body,
+  provider,
+  questions,
+  allow_sentinel = FALSE
+) {
   envelope <- jev_validate_response_envelope(
     body,
     provider,
     questions,
     allow_missing = FALSE
   )
-  parsed <- jev_parse_response_answers(envelope, allow_invalid = FALSE)
+  parsed <- jev_parse_response_answers(
+    envelope,
+    allow_invalid = FALSE,
+    allow_sentinel = allow_sentinel
+  )
   jev_new_response(envelope, parsed$answers)
 }
 
-jev_parse_response_partial <- function(body, provider, questions) {
+jev_parse_response_partial <- function(
+  body,
+  provider,
+  questions,
+  allow_sentinel = FALSE
+) {
   envelope <- jev_validate_response_envelope(
     body,
     provider,
     questions,
     allow_missing = TRUE
   )
-  parsed <- jev_parse_response_answers(envelope, allow_invalid = TRUE)
+  parsed <- jev_parse_response_answers(
+    envelope,
+    allow_invalid = TRUE,
+    allow_sentinel = allow_sentinel
+  )
 
   list(
     response = jev_new_response(envelope, parsed$answers),

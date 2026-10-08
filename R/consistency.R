@@ -248,9 +248,31 @@ jev_consistency <- function(x, permuted) {
     }
   }
 
+  if (length(rows) == 0L) {
+    return(jev_consistency_empty())
+  }
   rows <- do.call(rbind, rows)
   rownames(rows) <- NULL
   rows
+}
+
+jev_consistency_empty <- function() {
+  out <- data.frame(
+    state_id = character(),
+    input_index = integer(),
+    question_id = character(),
+    status = character(),
+    n_permutations = integer(),
+    n_answered = integer(),
+    choice = character(),
+    agreement = numeric(),
+    confidence = numeric(),
+    stringsAsFactors = FALSE
+  )
+  out$probabilities <- I(list())
+  out$choices <- I(list())
+  out$orders <- I(list())
+  out
 }
 
 jev_plan_answer_ids <- function(plan) {

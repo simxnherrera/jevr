@@ -121,3 +121,27 @@ test_that("long format flags alias requests like the wide format", {
   response$metadata$requested_model <- "jev-1.13.0"
   expect_false(any(as.data.frame(response, format = "long")$is_alias))
 })
+
+test_that("on_result callbacks receive the answered model", {
+  withr::local_envvar(TYPESAFE_API_KEY = "k")
+  seen <- character()
+  mock <- function(req) {
+    httr2::response(
+      status_code = 200,
+      headers = list("Content-Type" = "application/json"),
+      body = charToRaw(jsonlite::toJSON(list(
+        model = "jev-1.13.0",
+        answers = list(u = list(type = "noul", noul = 0.7)),
+        usage = list(input_tokens = 1, output_tokens = 1)
+      ), auto_unbox = TRUE))
+    )
+  }
+  httr2::with_mocked_responses(mock, jev_map(
+    c(a = "x", b = "y"), list(u = jev_noul("Urgent?")),
+    max_retries = 0, progress = FALSE,
+    on_result = function(result) {
+      seen[[result$state_id]] <<- result$provenance$answered_model
+    }
+  ))
+  expect_equal(unname(seen), c("jev-1.13.0", "jev-1.13.0"))
+})

@@ -207,7 +207,7 @@ test_that("sentinel answers are NA in long format, bands and score answers", {
       refund = list(type = "noul", noul = 0.5)
     )
   )
-  response <- jev_parse_response(raw, "vercel", questions)
+  response <- jev_parse_response(raw, "vercel", questions, allow_sentinel = TRUE)
   expect_true(is.na(response$answers$quality$confidence))
   expect_true(isTRUE(response$answers$quality$confidence_unavailable))
 
@@ -276,4 +276,32 @@ test_that("jev_map sends fallback and surfaces metadata per result", {
   expect_identical(item$response$metadata$fallback$final_model, "openai/gpt-6-astra")
   plain <- jev_execution_id("x", fb_questions()["refund"], "vercel", "typesafe-ai/jev")
   expect_false(identical(item$provenance$execution_id, plain))
+})
+
+test_that("the unavailable sentinel is rejected unless a fallback triggered", {
+  raw <- list(
+    model = "jev-1.13.0",
+    answers = list(intent = list(type = "choice", choice = "billing",
+      probabilities = setNames(list(), character()), confidence = 0))
+  )
+  expect_error(
+    jev_parse_response(raw, "typesafe", fb_questions()["intent"]),
+    class = "jev_response_error"
+  )
+
+  withr::local_envvar(AI_GATEWAY_API_KEY = "k")
+  mock <- function(req) {
+    httr2::response(
+      status_code = 200,
+      headers = list("Content-Type" = "application/json"),
+      body = charToRaw(fb_body(raw$answers))
+    )
+  }
+  expect_error(
+    httr2::with_mocked_responses(
+      mock,
+      jev_ask("s", fb_questions()["intent"], provider = "vercel", max_retries = 0)
+    ),
+    class = "jev_response_error"
+  )
 })

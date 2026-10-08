@@ -224,15 +224,14 @@ jev_ask <- function(
   )
   body <- jev_body_json(response, provider_name)
 
+  http_metadata <- jev_response_metadata(response, provider_name)
   result <- jev_parse_response(
     body,
     provider_name,
-    questions
+    questions,
+    allow_sentinel = isTRUE(http_metadata$fallback$triggered)
   )
-  result$metadata <- utils::modifyList(
-    result$metadata,
-    jev_response_metadata(response, provider_name)
-  )
+  result$metadata <- utils::modifyList(result$metadata, http_metadata)
   result$metadata$requested_model <- model
   result
 }
